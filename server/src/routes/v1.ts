@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 
 import { ok } from '../lib/response';
 import { accountRouter } from '../modules/accounts/account.routes';
+import { aiRouter } from '../modules/ai/ai.routes';
+import { analyticsRouter } from '../modules/analytics/analytics.routes';
 import { authRouter } from '../modules/auth/auth.routes';
 import { budgetRouter } from '../modules/budgets/budget.routes';
 import { categoryRouter } from '../modules/categories/category.routes';
@@ -41,3 +43,5 @@ v1Router.use('/transactions', transactionRouter);
 v1Router.use('/budgets', budgetRouter);
 v1Router.use('/recurring', recurringRouter);
 v1Router.use('/notifications', notificationRouter);
+v1Router.use('/analytics', analyticsRouter);
+v1Router.use('/ai', aiRouter);

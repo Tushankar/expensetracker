@@ -48,11 +48,20 @@ export const apiLimiter = rateLimit({
 });
 
 /**
- * Tight limit on the endpoints worth attacking: login, register, refresh.
+ * Tight limit on the two endpoints where a secret can actually be guessed: login
+ * and register.
  *
  * Keyed by IP *and* the submitted email, so one attacker cannot lock out a real
  * user by spraying their address, and cannot dodge the limit by rotating
  * addresses from one IP either.
+ *
+ * Deliberately **not** on `/auth/refresh` or `/auth/logout`. Neither carries an
+ * email, so the key would collapse to the bare IP — and every user behind one
+ * office, campus or carrier-grade NAT would then share a single twenty-attempts
+ * bucket, locking out real people to defend against nothing. A refresh token is
+ * 200-plus bits of server-generated entropy under an HMAC; it is not guessable,
+ * and a *stolen* one is caught by rotation and reuse detection rather than by a
+ * counter. The blanket API limiter still applies to both.
  */
 export const authLimiter = rateLimit({
   ...shared,

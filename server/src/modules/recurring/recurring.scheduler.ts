@@ -31,18 +31,40 @@ export type SchedulerResult = {
 };
 
 /**
+ * The pass currently running, if any.
+ *
+ * Two passes at once double-bill. The timer fires every minute and the
+ * `/recurring/run` endpoint calls the same function, so "at once" is not
+ * hypothetical — it happens the first time a manual run lands on a tick, and it
+ * happened in the test suite before this existed. Sharing the in-flight promise
+ * means a second caller waits for the first rather than racing it.
+ */
+let passInFlight: Promise<SchedulerResult> | null = null;
+
+/**
  * Writes the transactions that are due, and announces the ones that are close.
  *
- * Idempotency comes from `occurrencesCreated`: the counter is advanced in the
- * same save that records the run, so a second pass finds `nextRunAt` already in
- * the future and does nothing. That matters because this runs on a timer — a slow
- * pass must not overlap with the next one and bill someone twice.
+ * Safe to call at any time and from anywhere: overlapping callers share one pass,
+ * and each occurrence is claimed with a conditional update before anything is
+ * written, so even two processes cannot both take the same one.
+ */
+export function runDueRecurring(now: Date = new Date()): Promise<SchedulerResult> {
+  if (passInFlight) return passInFlight;
+
+  passInFlight = executePass(now).finally(() => {
+    passInFlight = null;
+  });
+  return passInFlight;
+}
+
+/**
+ * One pass.
  *
  * Rules are processed one at a time rather than in parallel. Each one writes a
  * transaction and moves an account balance, and the throughput of a personal
  * finance app's standing orders is not worth the concurrency bugs.
  */
-export async function runDueRecurring(now: Date = new Date()): Promise<SchedulerResult> {
+async function executePass(now: Date): Promise<SchedulerResult> {
   const result: SchedulerResult = { created: 0, announced: 0, finished: 0, errors: 0 };
 
   const due = await RecurringModel.find({
@@ -51,62 +73,98 @@ export async function runDueRecurring(now: Date = new Date()): Promise<Scheduler
     nextRunAt: { $lte: now },
   })
     .sort({ nextRunAt: 1 })
-    .limit(500);
+    .limit(500)
+    .lean();
 
   for (const rule of due) {
     try {
       const zone = await timezoneOf(rule.userId);
+      let cursor = rule;
       let writes = 0;
 
       while (
-        rule.isActive &&
-        rule.nextRunAt.getTime() <= now.getTime() &&
+        cursor.isActive &&
+        cursor.nextRunAt.getTime() <= now.getTime() &&
         writes < MAX_CATCHUP_PER_RULE
       ) {
-        const occurrenceAtDate = rule.nextRunAt;
+        const occurrence = cursor.nextRunAt;
+        const nextRunAt = occurrenceAt(
+          cursor.startDate,
+          cursor.unit as RecurrenceUnit,
+          cursor.interval,
+          cursor.occurrencesCreated + 1,
+          zone,
+        );
+        const stillActive = !hasFinished({
+          endDate: cursor.endDate,
+          maxOccurrences: cursor.maxOccurrences,
+          occurrencesCreated: cursor.occurrencesCreated + 1,
+          nextRunAt,
+        });
 
-        if (rule.autoCreate) {
+        /**
+         * Claim the occurrence before writing it.
+         *
+         * The filter pins `occurrencesCreated` to what we read, so exactly one
+         * caller can advance it — a second pass, in this process or another,
+         * finds the count already moved and gets nothing back. Claiming *first*
+         * means a crash between the claim and the write skips a charge rather
+         * than repeating one, which is the right way round: a missed rent entry
+         * is something a person notices and adds, a duplicate debit is something
+         * they have to unpick.
+         */
+        const claimed = await RecurringModel.findOneAndUpdate(
+          {
+            _id: cursor._id,
+            occurrencesCreated: cursor.occurrencesCreated,
+            isActive: true,
+            isPaused: false,
+          },
+          {
+            $set: {
+              occurrencesCreated: cursor.occurrencesCreated + 1,
+              lastRunAt: occurrence,
+              nextRunAt,
+              isActive: stillActive,
+            },
+          },
+          { new: true },
+        ).lean();
+
+        if (!claimed) break;
+
+        if (!stillActive) result.finished += 1;
+
+        if (claimed.autoCreate) {
           // `createTransaction` runs the budget check itself, so a standing
           // charge that tips a cap over raises the same alert a manual entry does.
-          const transaction = await createTransaction(String(rule.userId), buildInput(rule));
+          const transaction = await createTransaction(
+            String(rule.userId),
+            buildInput({ ...claimed, nextRunAt: occurrence }),
+          );
           result.created += 1;
 
           await raise({
             userId: rule.userId as Types.ObjectId,
             type: 'recurring_created',
-            title: `${rule.name} was recorded`,
-            body: `${formatRupees(rule.amount)} on ${formatDay(occurrenceAtDate, zone)}.`,
-            dedupeKey: `rule:${String(rule._id)}:${occurrenceAtDate.toISOString()}:created`,
-            data: { recurringId: String(rule._id), transactionId: transaction.id },
+            title: `${claimed.name} was recorded`,
+            body: `${formatRupees(claimed.amount)} on ${formatDay(occurrence, zone)}.`,
+            dedupeKey: `rule:${String(claimed._id)}:${occurrence.toISOString()}:created`,
+            data: { recurringId: String(claimed._id), transactionId: transaction.id },
           });
         }
 
-        rule.occurrencesCreated += 1;
-        rule.lastRunAt = occurrenceAtDate;
-        rule.nextRunAt = occurrenceAt(
-          rule.startDate,
-          rule.unit as RecurrenceUnit,
-          rule.interval,
-          rule.occurrencesCreated,
-          zone,
-        );
-        if (hasFinished(rule)) {
-          rule.isActive = false;
-          result.finished += 1;
-        }
-
+        cursor = claimed;
         writes += 1;
       }
 
-      if (writes >= MAX_CATCHUP_PER_RULE && rule.nextRunAt.getTime() <= now.getTime()) {
+      if (writes >= MAX_CATCHUP_PER_RULE && cursor.nextRunAt.getTime() <= now.getTime()) {
         logger.warn(
-          { ruleId: String(rule._id), name: rule.name },
+          { ruleId: String(cursor._id), name: cursor.name },
           'recurring rule hit the catch-up cap; pausing it rather than writing more',
         );
-        rule.isPaused = true;
+        await RecurringModel.updateOne({ _id: cursor._id }, { $set: { isPaused: true } });
       }
-
-      await rule.save();
     } catch (error) {
       result.errors += 1;
       // One broken rule — a deleted account, say — must not stop everyone else's.
@@ -159,6 +217,7 @@ function buildInput(rule: {
   name: string;
   description?: string;
   paymentMethod?: string;
+  /** The occurrence being written, not the rule's next one. */
   nextRunAt: Date;
 }) {
   const base = {
@@ -206,9 +265,9 @@ let timer: NodeJS.Timeout | null = null;
  * occurrence counter makes a repeat a no-op. Running late writes the same
  * transactions a moment later; running twice writes them once.
  *
- * It does assume one process. Two instances would both pick up the same rule and
- * both write it — the fix at that point is a lock collection or a real scheduler,
- * not a shorter interval.
+ * Two instances would both wake up and both find the same rules due, which is
+ * fine: each occurrence is claimed with a conditional update, so only one of them
+ * can write it. They would duplicate the *reads*, not the money.
  */
 export function startScheduler(intervalMs: number): void {
   if (timer) return;
@@ -234,6 +293,7 @@ export function startScheduler(intervalMs: number): void {
 export function stopScheduler(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  passInFlight = null;
   zoneCache.clear();
 }
 

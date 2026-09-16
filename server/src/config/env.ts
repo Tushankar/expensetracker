@@ -36,6 +36,35 @@ const schema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
   /**
+   * The Groq key. Server-only, and the reason the assistant is a backend feature
+   * rather than a client one: an `EXPO_PUBLIC_*` value is inlined into the
+   * JavaScript bundle, and a bundle is a zip anyone can open.
+   *
+   * Optional. Without it every AI endpoint still answers — from the deterministic
+   * summaries the analytics service produces — so the app degrades to plainer
+   * wording rather than to an error.
+   */
+  GROQ_API_KEY: z.string().trim().optional(),
+  GROQ_BASE_URL: z.string().url().default('https://api.groq.com/openai/v1'),
+  /** The conversational model: summaries, insights, answers. */
+  GROQ_MODEL: z.string().trim().default('openai/gpt-oss-120b'),
+  /**
+   * A smaller model for the structured calls — intent extraction and
+   * categorisation — where the job is classification, not prose, and latency is
+   * felt directly in a keystroke.
+   */
+  GROQ_FAST_MODEL: z.string().trim().default('openai/gpt-oss-20b'),
+  /**
+   * A slow answer is worse than a plain one. Past this the request is abandoned
+   * and the caller's deterministic fallback is used instead.
+   */
+  GROQ_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+
+  /** Assistant calls per user per window. Groq costs money and time. */
+  AI_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  AI_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+
+  /**
    * How often the recurring scheduler looks for work. Sixty seconds is far more
    * often than a monthly rule needs — the point is that a rule due at 9am fires
    * within a minute of 9am rather than whenever someone next opens the app.
