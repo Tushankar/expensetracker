@@ -1,37 +1,28 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { View } from 'react-native';
 
-import { BarChart } from '@/components/charts';
 import { Icon, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
-import type { MonthSummary, WeeklySpend } from '@/types/models';
-import { formatCompactINR, formatINR, percentChange } from '@/utils/currency';
-import { monthLabel } from '@/utils/date';
+import type { PeriodSummary } from '@/types/models';
+import { formatINR, percentChange } from '@/utils/currency';
 
 export type ActivitySummaryCardProps = {
-  summary: MonthSummary;
-  /** One bar per day so far this month. */
-  daily: readonly WeeklySpend[];
-  /** Available width, so the chart can be sized without a layout pass. */
-  width: number;
+  summary: PeriodSummary;
 };
 
 /**
- * The month's spend at the top of Activity: the total on the left, the daily shape
- * on the right.
+ * The period's money at the top of Activity: what went out, what came in, and what
+ * merely moved.
  *
- * The bars are unlabelled on purpose — at one bar per day there is no room for an
- * axis, and the point is the rhythm of the month rather than any single day.
+ * Three figures rather than a chart, because all three are exact — the server
+ * aggregates over the whole period, while a chart drawn from the loaded pages
+ * would be a picture of how far the user has scrolled.
  */
-export function ActivitySummaryCard({ summary, daily, width }: ActivitySummaryCardProps) {
+export function ActivitySummaryCard({ summary }: ActivitySummaryCardProps) {
   const theme = useTheme();
 
   const delta = percentChange(summary.spent, summary.previousSpent);
   const spendingUp = (delta ?? 0) > 0;
-
-  const padding = theme.spacing.xl;
-  const inner = width - padding * 2;
-  const chartWidth = Math.max(120, Math.round(inner * 0.46));
 
   return (
     <LinearGradient
@@ -44,7 +35,7 @@ export function ActivitySummaryCard({ summary, daily, width }: ActivitySummaryCa
           borderRadius: theme.radius.xl,
           borderWidth: theme.layout.hairline,
           borderColor: theme.colors.heroBorder,
-          padding,
+          padding: theme.spacing.xl,
         },
       ]}
     >
@@ -53,74 +44,108 @@ export function ActivitySummaryCard({ summary, daily, width }: ActivitySummaryCa
           Total spent
         </Text>
         <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
-          {monthLabel(summary.month)}
+          {summary.label}
         </Text>
       </View>
 
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'flex-end',
-          gap: theme.spacing.md,
-          marginTop: theme.spacing.md,
-        }}
+      <Text
+        variant="display"
+        color={theme.colors.heroText}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+        style={{ marginTop: theme.spacing.sm }}
       >
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text
-            variant="display"
-            color={theme.colors.heroText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-          >
-            {formatINR(summary.spent)}
-          </Text>
+        {formatINR(summary.spent)}
+      </Text>
 
-          {delta !== null ? (
-            <View
-              accessible
-              accessibilityLabel={`Spending ${spendingUp ? 'up' : 'down'} ${Math.abs(
-                delta,
-              ).toFixed(0)} percent versus last month`}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                marginTop: theme.spacing.sm,
-              }}
-            >
-              <Icon
-                name={spendingUp ? 'trendingUp' : 'trendingDown'}
-                size={13}
-                color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
-                strokeWidth={2.4}
-              />
-              <Text
-                variant="caption"
-                color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
-              >
-                {`${Math.abs(delta).toFixed(0)}%`}
-              </Text>
-              <Text variant="caption" color={theme.colors.heroTextMuted}>
-                vs last month
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={{ width: chartWidth }}>
-          <BarChart
-            data={daily.map((day) => ({ label: day.label, value: day.amount }))}
-            color={theme.colors.brandText}
-            height={64}
-            gap={3}
-            barRadius={2}
-            showLabels={false}
-            formatValue={formatCompactINR}
-            accessibilityLabel={`Daily spending for the last ${daily.length} days`}
+      {delta !== null ? (
+        <View
+          accessible
+          accessibilityLabel={`Spending ${spendingUp ? 'up' : 'down'} ${Math.abs(delta).toFixed(
+            0,
+          )} percent versus the previous period`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}
+        >
+          <Icon
+            name={spendingUp ? 'trendingUp' : 'trendingDown'}
+            size={13}
+            color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
+            strokeWidth={2.4}
           />
+          <Text
+            variant="caption"
+            color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
+          >
+            {`${Math.abs(delta).toFixed(0)}%`}
+          </Text>
+          <Text variant="caption" color={theme.colors.heroTextMuted}>
+            vs last period
+          </Text>
         </View>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginTop: theme.spacing.xl }}>
+        <Figure label="Received" value={formatINR(summary.income)} tone="positive" />
+        <Figure
+          label="Kept"
+          value={formatINR(summary.saved, { signed: true })}
+          tone={summary.saved < 0 ? 'negative' : 'positive'}
+        />
+        {/* Shown whenever there is one, and never folded into the two above it. */}
+        {summary.transferred > 0 ? (
+          <Figure label="Moved" value={formatINR(summary.transferred)} tone="muted" />
+        ) : null}
       </View>
     </LinearGradient>
+  );
+}
+
+function Figure({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: 'positive' | 'negative' | 'muted';
+}) {
+  const theme = useTheme();
+
+  const color =
+    tone === 'positive'
+      ? theme.colors.heroPositive
+      : tone === 'negative'
+        ? theme.colors.heroNegative
+        : theme.colors.heroTextMuted;
+
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label}, ${value}`}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        gap: 3,
+        padding: theme.spacing.md,
+        borderRadius: theme.radius.md,
+        backgroundColor: theme.colors.heroTile,
+        borderWidth: theme.layout.hairline,
+        borderColor: theme.colors.heroTileBorder,
+      }}
+    >
+      <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text
+        variant="labelSm"
+        color={color}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }

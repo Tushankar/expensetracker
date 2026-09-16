@@ -6,24 +6,31 @@ import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { NavigationContainer } from '@react-navigation/native';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { createQueryClient } from '@/api';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { toNavigationTheme } from '@/navigation/navigationTheme';
 import { AddTransactionSheet } from '@/screens/sheets/AddTransactionSheet';
+import { useAuthStore } from '@/store/authStore';
 import { ThemeProvider, useTheme } from '@/theme';
 
 // Hold the native splash until Inter is ready, so text never renders in the
 // system font and then reflow into Inter a frame later.
 void SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 300, fade: true });
+
+// Created once outside the component: a client rebuilt on a re-render would throw
+// away every cached query and refetch the whole app.
+const queryClient = createQueryClient();
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -33,9 +40,21 @@ export default function App() {
     Inter_700Bold,
   });
 
+  const restore = useAuthStore((state) => state.restore);
+  const authStatus = useAuthStore((state) => state.status);
+  const [restoreStarted, setRestoreStarted] = useState(false);
+
+  useEffect(() => {
+    if (restoreStarted) return;
+    setRestoreStarted(true);
+    void restore();
+  }, [restore, restoreStarted]);
+
   // A font that fails to download should degrade to the system face, not block the
-  // app behind a splash screen forever.
-  const ready = fontsLoaded || fontError !== null;
+  // app behind a splash screen forever. Reading the keychain is held for, though —
+  // showing the sign-in screen to someone who is already signed in, then swapping
+  // it out a frame later, is worse than a slightly longer splash.
+  const ready = (fontsLoaded || fontError !== null) && authStatus !== 'restoring';
 
   const onLayout = useCallback(() => {
     if (ready) void SplashScreen.hideAsync();
@@ -45,11 +64,13 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root} onLayout={onLayout}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <AppShell />
-        </ThemeProvider>
-      </SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <AppShell />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }
@@ -57,6 +78,7 @@ export default function App() {
 /** Split out so it can read the theme that `ThemeProvider` supplies. */
 function AppShell() {
   const theme = useTheme();
+  const signedIn = useAuthStore((state) => state.status === 'signedIn');
 
   useEffect(() => {
     // Paints the window behind the React tree, which is what shows during rotation
@@ -69,8 +91,9 @@ function AppShell() {
       <NavigationContainer theme={toNavigationTheme(theme)}>
         <StatusBar style="light" />
         <RootNavigator />
-        {/* Mounted at the root so it can cover the tab bar it is launched from. */}
-        <AddTransactionSheet />
+        {/* Mounted at the root so it can cover the tab bar it is launched from,
+            and only while there is a session for it to write to. */}
+        {signedIn ? <AddTransactionSheet /> : null}
       </NavigationContainer>
     </View>
   );

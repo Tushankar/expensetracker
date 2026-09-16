@@ -18,7 +18,11 @@
     "**/*.ts",
     "**/*.tsx"
   ],
+  // `server/` is a separate Node package with its own tsconfig, its own lib and
+  // its own dependencies. Type-checking it under the app's config would be
+  // checking it against the wrong settings, and Metro never bundles it either.
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "server"
   ]
 }
