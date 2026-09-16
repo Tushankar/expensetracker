@@ -1,12 +1,15 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { BudgetsScreen } from '@/screens/BudgetsScreen';
+import { AccountFormScreen } from '@/screens/AccountFormScreen';
+import { AccountsScreen } from '@/screens/AccountsScreen';
+import { AuthScreen } from '@/screens/AuthScreen';
 import { DesignSystemScreen } from '@/screens/DesignSystemScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
-import { InsightsScreen } from '@/screens/InsightsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { TransactionDetailScreen } from '@/screens/TransactionDetailScreen';
 import { TransactionsScreen } from '@/screens/TransactionsScreen';
+import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { useTheme } from '@/theme';
 
@@ -23,7 +26,7 @@ function MainTabs() {
     <Tab.Navigator
       // Screens own their own headers so each can have its own layout.
       screenOptions={{ headerShown: false }}
-      tabBar={(props) => <TabBar {...props} onAddPress={openAddSheet} />}
+      tabBar={(props) => <TabBar {...props} onAddPress={() => openAddSheet('expense')} />}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
       <Tab.Screen
@@ -31,14 +34,23 @@ function MainTabs() {
         component={TransactionsScreen}
         options={{ title: 'Activity' }}
       />
-      <Tab.Screen name="Budgets" component={BudgetsScreen} options={{ title: 'Budgets' }} />
-      <Tab.Screen name="Insights" component={InsightsScreen} options={{ title: 'Insights' }} />
+      <Tab.Screen name="Accounts" component={AccountsScreen} options={{ title: 'Accounts' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Tab.Navigator>
   );
 }
 
+/**
+ * The whole app is either signed in or signed out, and the navigator is the single
+ * place that decides which.
+ *
+ * Two separate trees rather than one with guards: a signed-out user cannot
+ * navigate to a screen that does not exist, and signing out unmounts every screen
+ * holding someone's balances rather than leaving them behind a redirect.
+ */
 export function RootNavigator() {
   const theme = useTheme();
+  const status = useAuthStore((state) => state.status);
 
   return (
     <Stack.Navigator
@@ -58,17 +70,28 @@ export function RootNavigator() {
         headerBackButtonDisplayMode: 'minimal',
       }}
     >
-      <Stack.Screen name="Tabs" component={MainTabs} />
-      <Stack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ headerShown: true, title: 'Settings' }}
-      />
-      <Stack.Screen
-        name="DesignSystem"
-        component={DesignSystemScreen}
-        options={{ headerShown: true, title: 'Design system' }}
-      />
+      {status === 'signedIn' ? (
+        <Stack.Group>
+          <Stack.Screen name="Tabs" component={MainTabs} />
+          <Stack.Screen
+            name="TransactionDetail"
+            component={TransactionDetailScreen}
+            options={{ headerShown: true, title: 'Transaction' }}
+          />
+          <Stack.Screen
+            name="AccountForm"
+            component={AccountFormScreen}
+            options={{ headerShown: true, title: 'Account' }}
+          />
+          <Stack.Screen
+            name="DesignSystem"
+            component={DesignSystemScreen}
+            options={{ headerShown: true, title: 'Design system' }}
+          />
+        </Stack.Group>
+      ) : (
+        <Stack.Screen name="Auth" component={AuthScreen} />
+      )}
     </Stack.Navigator>
   );
 }

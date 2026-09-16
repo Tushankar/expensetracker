@@ -4,13 +4,17 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type MainTabParamList = {
   Home: undefined;
   Transactions: undefined;
-  Budgets: undefined;
-  Insights: undefined;
+  Accounts: undefined;
+  Settings: undefined;
 };
 
 export type RootStackParamList = {
+  /** The signed-out half of the app. Mounted instead of `Tabs`, never beside it. */
+  Auth: undefined;
   Tabs: NavigatorScreenParams<MainTabParamList>;
-  Settings: undefined;
+  TransactionDetail: { id: string };
+  /** No id means "create". */
+  AccountForm: { id?: string } | undefined;
   DesignSystem: undefined;
 };
 

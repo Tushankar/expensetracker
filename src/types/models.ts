@@ -1,87 +1,46 @@
-import type { IconName } from '@/components/icons/registry';
-import type { CategoryHue } from '@/theme';
-
 /**
  * Money is stored as an integer number of paise, never as a float of rupees.
  * 0.1 + 0.2 !== 0.3 in IEEE-754, and a ledger that drifts by a paisa is a ledger
- * nobody trusts. Format at the edge with `formatINR`.
+ * nobody trusts. The API speaks the same unit, so nothing converts in the middle;
+ * format at the edge with `formatINR`.
  */
 export type Paise = number;
 
-export type TransactionKind = 'expense' | 'income' | 'transfer';
-
-/** How the money actually moved. UPI is first-class here, not a card sub-type. */
-export type PaymentMethod = 'upi' | 'card' | 'cash' | 'netbanking' | 'autopay';
-
-export type AccountKind = 'bank' | 'cash' | 'creditCard' | 'wallet';
-
-export type Category = {
-  id: string;
+/**
+ * What a summary card needs, assembled from the API's `/transactions/summary`.
+ *
+ * Note what is here and what is not: income, expense and the previous period's
+ * figures, all of which the server aggregates exactly. There is no time series,
+ * because the API does not return one and a chart drawn from whichever page of
+ * transactions happened to be loaded would be a chart of the scroll position.
+ *
+ * `transferred` is carried alongside rather than folded into either total —
+ * moving ₹10,000 from HDFC to Cash is not income and not spending, and the card
+ * shows it separately so the number is visible rather than merely absent.
+ */
+export type PeriodSummary = {
+  /** Start of the period, ISO. */
+  from: string;
+  /** End of the period, ISO. */
+  to: string;
   label: string;
-  icon: IconName;
-  hue: CategoryHue;
-};
-
-export type Account = {
-  id: string;
-  name: string;
-  kind: AccountKind;
-  /** Bank or issuer, e.g. "HDFC Bank". */
-  institution?: string;
-  /** Last four digits, for cards and accounts. */
-  last4?: string;
-  /** Negative for a credit card means money owed. */
-  balance: Paise;
-  icon: IconName;
-};
-
-export type Transaction = {
-  id: string;
-  kind: TransactionKind;
-  /** Always positive. `kind` carries the direction. */
-  amount: Paise;
-  merchant: string;
-  categoryId: string;
-  accountId: string;
-  method: PaymentMethod;
-  /** ISO 8601. */
-  occurredAt: string;
-  note?: string;
-  /** Part of a recurring series, e.g. rent or a subscription. */
-  recurring?: boolean;
-};
-
-export type MonthSummary = {
-  /** First day of the month the summary covers, ISO. */
-  month: string;
-  openingBalance: Paise;
-  currentBalance: Paise;
   income: Paise;
   spent: Paise;
-  /** income - spent. Can be negative. */
+  /** income − spent. Can be negative. */
   saved: Paise;
-  /** Last month, for the delta chips. */
+  transferred: Paise;
   previousIncome: Paise;
   previousSpent: Paise;
+  /** Sum of every active account. */
+  currentBalance: Paise;
 };
 
-/** One bar in the weekly spending chart. */
-export type WeeklySpend = {
-  /** Short axis label, e.g. "W1". */
+/** One band of the spending donut, already resolved to a label and a colour. */
+export type CategorySlice = {
+  key: string;
   label: string;
+  color: string;
   amount: Paise;
-};
-
-export type CategorySpend = {
-  categoryId: string;
-  amount: Paise;
-  /** 0-1 share of the month's total spend. */
+  /** 0–1 share of the period's total spend. */
   share: number;
-};
-
-export type Budget = {
-  id: string;
-  categoryId: string;
-  limit: Paise;
-  spent: Paise;
 };
