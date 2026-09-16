@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import { errorMessage, isApiError, useChangePassword } from '@/api';
@@ -20,6 +20,10 @@ export type ChangePasswordSheetProps = {
  * Pretending the current session survived would leave the user holding a token
  * that fails on the very next request, which looks like a bug rather than the
  * security feature it is.
+ *
+ * The caller passes a `key` that changes on each open, which is what empties these
+ * fields — and it matters more here than elsewhere that a typed password never
+ * survives a close.
  */
 export function ChangePasswordSheet({ visible, onClose }: ChangePasswordSheetProps) {
   const theme = useTheme();
@@ -31,15 +35,6 @@ export function ChangePasswordSheet({ visible, onClose }: ChangePasswordSheetPro
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (visible) return;
-    setCurrent('');
-    setNext('');
-    setConfirm('');
-    setError(undefined);
-    setFieldErrors({});
-  }, [visible]);
 
   async function handleSave() {
     setError(undefined);

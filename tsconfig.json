@@ -23,6 +23,7 @@
   // checking it against the wrong settings, and Metro never bundles it either.
   "exclude": [
     "node_modules",
-    "server"
+    "server",
+    "scripts"
   ]
 }

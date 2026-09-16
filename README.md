@@ -1,160 +1,245 @@
 # Paisa
 
-An India-first personal expense tracker. This repository currently contains **Step 1: the UI
-foundation** — the design system, navigation shell and a Home screen built on static data.
-There is no backend, no auth and no persistence yet.
+An India-first personal expense tracker: a React Native app and the Node API behind it.
+
+**Step 1** built the design system and the navigation shell on static data.
+**Step 2 — this** — replaced all of it with a real backend: accounts, categories,
+transactions and transfers, JWT auth with refresh, and a mobile data layer that
+handles loading, errors, empty states and lost connections.
+
+Budgets, analytics, AI and receipt scanning are deliberately not here yet.
 
 ## Running it
 
+Two processes. The API first:
+
 ```bash
+cd server
 npm install
-npm start          # then press i / a, or scan the QR code
+cp .env.example .env     # fill in MONGODB_URI and the two JWT secrets
+npm run dev              # http://localhost:4000/api/v1
+npm run seed             # optional: demo@paisa.app / Password123, with a month of data
 ```
 
-`npm run typecheck` and `npm run lint` both pass clean; keep them that way.
+Then the app, from the repository root:
+
+```bash
+npm install
+npm start                # then press i / a, or scan the QR code
+```
+
+The app finds the API on its own: it reuses the host Expo is already serving the
+bundle from, on port 4000. That means a physical device works with no configuration —
+`localhost` on a phone is the phone. Override it with `EXPO_PUBLIC_API_URL` in `.env`
+for a tunnel or a deployed server, and restart the bundler afterwards (Metro inlines
+`EXPO_PUBLIC_*` at start-up). Settings shows the resolved URL in a dev build.
+
+## Checks
+
+| | |
+| --- | --- |
+| `npm run typecheck` | App and scripts. |
+| `npm run lint` | |
+| `npm run verify` | 29 unit checks + 15 API-client behaviour tests. No server needed. |
+| `npm run verify:e2e` | 29 checks of the mobile data layer against a running API. |
+| `npm run server:test` | 58 integration tests of the API against the real database. |
+
+All five pass. The last two need `npm run server` in another terminal.
+
+What the suites are for, in order: `verify` covers the pure logic that is easy to get
+quietly wrong and impossible to eyeball in a simulator — Indian digit grouping, what
+each keypad press does to the amount, where a period's boundaries fall — plus the
+client's token handling against a fake server. `verify:e2e` calls the same
+`transactionApi.create` the screens call, against the real API, so a field renamed on
+one side and not the other fails there rather than on a device. `server:test` covers
+the API on its own, including that one user cannot read or spend from another's
+account.
+
+What none of them cover: React rendering. Layout, gestures and animation still need a
+device.
 
 ## Stack
 
-| Concern    | Choice                                                          |
-| ---------- | --------------------------------------------------------------- |
-| Runtime    | Expo SDK 57 · React Native 0.86 · React 19.2 · New Architecture  |
-| Language   | TypeScript, `strict` + `noUncheckedIndexedAccess`                |
-| Navigation | React Navigation 7 (native stack + bottom tabs, custom tab bar)  |
-| State      | Zustand                                                          |
-| Styling    | Token-driven `StyleSheet`, dark-only, three accents               |
-| Charts     | Hand-built on `react-native-svg` — no charting dependency         |
-| Animation  | Reanimated 4 + Gesture Handler                                   |
-| Icons      | Hand-authored SVG paths on `react-native-svg`                    |
-| Type       | Inter, loaded at runtime via `expo-font`                         |
-
-Two deliberate deviations from the obvious defaults:
-
-- **React Navigation, not Expo Router.** In SDK 57 Expo Router dropped React Navigation for
-  `standard-navigation` and blocks direct `@react-navigation/*` imports. The router scaffold was
-  removed so the app can use React Navigation directly and own its tab bar.
-- **No `@expo/vector-icons`.** It is deprecated in SDK 57. Icons are drawn from a local registry of
-  24×24 stroke paths, which also means one consistent stroke weight and no icon font to load.
+| Concern | App | API |
+| --- | --- | --- |
+| Runtime | Expo SDK 57 · RN 0.86 · React 19.2 | Node 20+ · Express 5 |
+| Language | TypeScript, `strict` + `noUncheckedIndexedAccess` | same |
+| Data | TanStack Query 5 | MongoDB · Mongoose 8 |
+| State | Zustand | — |
+| Auth | expo-secure-store | JWT access + rotating refresh, bcrypt |
+| Validation | — | Zod at every edge |
+| Navigation | React Navigation 7, custom tab bar | — |
+| Styling | Token-driven `StyleSheet`, dark-only, three accents | — |
+| Charts | Hand-built on `react-native-svg` | — |
+| Icons | Hand-authored SVG paths, ~95 glyphs | — |
 
 ## Layout
 
 ```
 src/
-  theme/        Tokens (colour, type, spacing, radius, shadow, motion) + ThemeProvider
+  api/          Client, endpoints, React Query hooks, wire types
+  theme/        Tokens + ThemeProvider
   components/
-    ui/         Design-system primitives — the only things screens should compose from
-    charts/     Sparkline, bars, donut, progress ring (react-native-svg)
+    ui/         Design-system primitives — the only things screens compose from
+    charts/     Donut, ring, bars, sparkline
     icons/      Icon path registry (data only)
-    home/       Home-specific composites
-    activity/   Activity-specific composites
-  navigation/   Stack + tabs, custom TabBar, React Navigation theme bridge
+    home/       Home composites
+    transactions/ Row + day-grouped list
+    activity/   Activity composites
+    data/       QueryState — the shared loading / error / empty boundary
+  navigation/   Stack + tabs, custom TabBar
   screens/      One file per screen; sheets/ for modal surfaces
-  store/        Zustand stores (theme preference, transient UI)
-  data/         Static sample data — the seam where the API will land
-  services/     Outbound integrations (currently just merchant logos)
-  utils/        Currency, dates, haptics
-  types/        Domain models
+  store/        Auth (persisted to the keychain), UI, accent
+  utils/        Currency, dates, periods, haptics
+scripts/        Checks that run under Node, and stubs for the native modules
+server/         The API. Has its own README.
 ```
 
-## Conventions that matter
+## How the pieces fit
 
-**Money is integer paise, never float rupees.** `Paise` is a branded-by-convention number type;
-format at the edge with `formatINR` / `formatCompactINR`. Rupee grouping is Indian (`12,34,567`)
-and implemented by hand rather than through `Intl`, whose availability varies across Hermes builds.
+**Money is an integer number of paise from the database to the screen.** No layer
+converts. `formatINR` renders at the edge, with Indian grouping (`12,34,567`) written
+by hand rather than through `Intl`, whose availability varies across Hermes builds.
 
-**Everything visual comes from `useTheme()`.** No hard-coded colours, sizes or spacing in a
-component.
+**A transfer between your own accounts is neither income nor spending.** It debits one
+account, credits the other, and appears in neither total — on the server, in the
+summary, and in the day headings on Activity. The transaction detail screen says so in
+words, because it is the one rule people get wrong about their own ledger.
 
-**The app is dark-only, with three accents**: Violet (default), Emerald and Crimson, switchable from
-Settings. An accent is not just a brand colour — it tints the whole neutral ramp, so a violet build
-has violet-cast greys and an emerald build has green-cast greys. That tint is most of what makes
-each one feel designed rather than recoloured. Components must never branch on `theme.accent`; read
-tokens and the accent takes care of itself.
+**Nothing on screen is fabricated.** Every figure comes from the server's own
+aggregation over the selected period, which is why the period chips re-query instead
+of re-filtering: a "6 months" chip that quietly summarised the 25 loaded rows would be
+worse than no chip. Step 1's shape-only sparklines are gone for the same reason — they
+sat next to real balances and read as if they meant something.
 
-**Every accent needs two brand values.** `brand` is dark enough to carry white text; `brandText` is
-light enough to be legible *as* text on a card. Emerald is the reason `textOnAccent` is per-accent:
-mint is far too light for white text, so it takes near-black instead.
+**The API layer is one fetch wrapper and a set of hooks.** `request()` attaches the
+token, unwraps the envelope and, on a 401, refreshes once and replays. The refresh is
+a single shared promise: an app that opens on Home fires four queries at once, and
+four parallel refreshes against a rotating endpoint look exactly like a stolen token —
+the server would correctly kill every session. Getting that wrong does not look like a
+bug in testing, it looks like the app randomly signing people out, so it has its own
+tests.
 
-**Green and red mean direction, in every accent.** Green is money in, red is money out, and neither
-is ever used decoratively — a green chip that does not mean income is a bug. The category hues are
-shared across accents for the same reason: a chart should read the same whichever brand is active.
+**A network failure and a server error are different states.** `NetworkError` is not
+an `ApiError`; "check your connection" and "try again" are different instructions, and
+giving the wrong one sends people to their router for no reason. Queries retry network
+failures twice and never retry a 4xx. Mutations never retry at all — a write that
+failed may well have succeeded, and booking the same expense twice is worse than an
+error message.
 
-**The balance card is its own colour context.** It is a deeper slab of the accent, so anything
-rendered inside it reads from the `hero*` tokens (`heroTile`, `heroText`, `heroPositive`, …) rather
-than from `surface` or `textPrimary`.
+**Every screen goes through `QueryState`.** Loading, error and empty are the states
+that separate an app that feels finished from one that does not, and they are exactly
+the states that get skipped when each screen rolls its own.
 
-**Merchant logos come from LogoKit**, with a monogram fallback. `MerchantAvatar` fetches
-`img.logokit.com/{domain}`; anything without a domain in `src/data/merchants.ts` (an auto rickshaw,
-a salary credit), anything that fails to resolve, and anything loaded offline falls back to a
-deterministic initial and tint derived from the name. A row is never empty.
+## The add-transaction flow
 
-Two things about that endpoint cost an hour each, so they are worth knowing:
+The whole sheet serves one number: how many gestures it takes to record a ₹40 chai.
 
-- **Headers are native-only.** The CDN returns no `Access-Control-Allow-Origin`. Attaching any
-  header on web promotes the load from a plain `<img>` fetch to a CORS request, which the browser
-  blocks — every logo silently becomes a monogram. On iOS and Android the opposite is true: without
-  an `Accept: image/*` header Cloudflare answers with a 403 challenge page instead of a PNG.
-- **The token is read at bundler start.** `EXPO_PUBLIC_*` values are inlined by Metro when the dev
-  server boots, so a server started before `.env` existed serves a bundle with no token and every
-  logo falls back to a monogram. Restart `npm start` after touching `.env`, and add `--clear` after
-  touching `app.json`, whose config is cached separately.
+Open, type, save — three. The keypad is already on screen, and the category, account,
+method and date fall back to whatever was used last for that type. Everything else is
+one tap away, and the merchant and note stay folded behind a link.
 
-The token in `app.json` is a *publishable* key, meant to ship inside clients. A LogoKit secret key
-(`sk_…`, which the Brand Data API at `api.logokit.com/brands/*` requires — the publishable key gets
-a 401 there) must never go in the app; that belongs behind the backend when one exists.
+Two deliberate choices there. **The keypad is ours, not the OS's**: the system numeric
+keyboard animates in over ~250ms, resizes the sheet, and on Android often covers the
+button you are reaching for. **The pickers swap the sheet's body rather than opening a
+second sheet**: two stacked native modals is a well-known source of Android flicker and
+iOS dismissal bugs, and swapping is faster anyway — no second entry animation, and the
+amount stays visible in the header so you never lose track of what you are
+categorising.
 
-**Flex children that hold text need `minWidth: 0`.** Without it they refuse to shrink below their
-content width and push the whole column wider than the screen. This bites on web especially.
+The sheet is remounted on each open via a counter in the UI store, used as its React
+`key`. That is what empties the form without a dozen `setState` calls in an effect —
+and because the counter only moves on the way in, the closing animation still plays
+over the form you were looking at. The same trick keys the filter, profile and
+password sheets.
 
-**Text goes through `<Text>` from `components/ui`.** It applies Inter, the shared type scale and a
-per-variant Dynamic Type cap. Raw `<Text>` from `react-native` gets none of those.
+## Categories
 
-**Icons are decorative by default.** `<Icon>` is hidden from screen readers unless you pass
-`accessibilityLabel`, which is correct for the common case of an icon beside a visible label.
+~106 of them, two levels deep, written for India rather than translated into it: Food ›
+Swiggy, Transport › Rapido, Home › Mobile Recharge. Brands are first-class because
+brands are what appear on a statement, and asking someone to file a Swiggy order under
+"Restaurants" is asking them to do the app's job. Fuel splits by what goes in the tank.
+Alcohol and tobacco get their own group rather than hiding inside Entertainment.
+Financial covers the EMI and SIP side of a household ledger that a Western default set
+leaves out.
 
-**Touch targets are at least 48dp.** Smaller controls extend their area with `hitSlop` rather than
-growing visually.
+They are copied per user at registration, not shared as global rows. That costs ~106
+small documents a head and buys the thing that matters: you can rename one or archive
+a whole group without it affecting anyone else.
+
+Icons and hues are stored as names, resolved on the device by `toIconName` and
+`categoryColor` — both of which fall back rather than crash, so a category created by a
+newer client renders as a neutral dot instead of taking the screen down.
+`verify:e2e` asserts that every seeded name actually resolves today.
+
+## Design conventions
+
+**Everything visual comes from `useTheme()`.** No hard-coded colours, sizes or spacing.
+
+**Dark-only, three accents** — Violet, Emerald, Crimson, switchable in Settings. An
+accent is not just a brand colour: it tints the whole neutral ramp, so a violet build
+has violet-cast greys. Components must never branch on `theme.accent`; read tokens and
+the accent takes care of itself.
+
+**Green and red mean direction, in every accent.** Green is money in, red is money out,
+neither is ever decorative. A transfer gets neither, because it is neither. Category
+hues are shared across accents so a chart reads the same whichever brand is active.
+
+**Only income is coloured in a list.** Painting every expense red turns a normal month
+into a wall of alarm; outgoing amounts stay in primary text and the minus sign does the
+work.
+
+**The balance card is its own colour context.** Anything inside it reads from the
+`hero*` tokens rather than `surface` or `textPrimary`.
+
+**Text goes through `<Text>` from `components/ui`** — it applies Inter, the shared type
+scale and a per-variant Dynamic Type cap. **Icons are decorative by default**, hidden
+from screen readers unless given an `accessibilityLabel`. **Touch targets are at least
+48dp**, extended with `hitSlop` rather than grown. **Flex children holding text need
+`minWidth: 0`**, or they refuse to shrink and push the column past the screen.
+
+Settings → **Design system** renders every primitive and every loading / empty / error
+state on one screen, including the keypad and the calendar.
 
 ## Accessibility
 
-- Measured against `surface`: `textSecondary` 7.2:1, `textTertiary` 4.8:1, `brandText` 6.4:1, and
-  white on `brand` 4.8:1 — all clear WCAG AA. Re-check before lightening a fill or darkening a text
-  token.
-- Each quick-action tile declares whether its glyph is dark or light, because the fills are fixed
-  hues rather than surfaces: amber takes a dark glyph, the rest take white.
+- Measured against `surface`: `textSecondary` 7.2:1, `textTertiary` 4.8:1, `brandText`
+  6.4:1, white on `brand` 4.8:1 — all clear WCAG AA.
 - Every animation honours the OS "reduce motion" setting.
 - Screens are safe-area aware top and bottom, including Android edge-to-edge.
-- Body and label text never drops below 12pt. Two exceptions are deliberate and documented in place:
-  the quick-action labels (11pt, so four fit a phone width on one line) and the figure inside the
-  spending ring (11/9pt, a graphic label that repeats at full size in the card beside it).
+- Errors are announced: form-level messages sit in `accessibilityLiveRegion`, and
+  field-level ones are attached to the input they belong to.
+- Body and label text never drops below 12pt, with two documented exceptions (the
+  quick-action labels and the figure inside the donut).
 
-## Seeing the system
+## Merchant logos
 
-Settings → **Design system** renders every primitive and every loading / empty / error state on one
-screen. Settings → **Accent** switches the whole app between Violet, Emerald and Crimson; check a
-change in more than one before calling it done.
+`MerchantAvatar` fetches `img.logokit.com/{domain}` with a deterministic monogram
+fallback, so a row is never empty. Two things about that endpoint cost an hour each:
 
-## What is deliberately missing
+- **Headers are native-only.** The CDN sends no `Access-Control-Allow-Origin`, so
+  attaching any header on web promotes the load to a CORS request the browser blocks.
+  On iOS and Android the opposite holds — without `Accept: image/*` Cloudflare answers
+  with a 403 challenge page.
+- **The token is read at bundler start.** Restart `npm start` after touching `.env`,
+  and add `--clear` after touching `app.json`.
 
-No backend, no MongoDB, no auth, no AI, and no persistence. The add-transaction sheet has real form
-state and validation but its submit closes the sheet without writing anything; the write slots into
-`handleSubmit` in `src/screens/sheets/AddTransactionSheet.tsx`.
+The key in `app.json` is a *publishable* key, meant to ship inside clients. A LogoKit
+secret key (`sk_…`) belongs behind the API, never in the app.
 
-`src/data/mock.ts` is the only source of data. When the API arrives, replace that module's exports
-with hooks and no screen should need restructuring.
+## Known rough edges
 
-The sample month is tuned so the figures on Home are internally consistent: the transactions add up
-to ₹85,227 spent against ₹1,57,000 earned, the category split is Food 20 / Rent 22 / Transport 12 /
-Shopping 10 / Bills 8 / Others 28, and the savings ring and the tip line both quote the same 46%.
-Change a transaction and those move together. Two series are shape-only and say so in place: the
-trend line behind the balance, and the thumbnail bars on the income and spent tiles.
+`react-hooks/immutability` is off in `eslint.config.js`. The React Compiler reads
+Reanimated's documented `sharedValue.value = withTiming(...)` as an illegal mutation
+([facebook/react#29640](https://github.com/facebook/react/issues/29640)), and shared
+values are used throughout the design system.
 
-The period chips above the spending cards, and the month pill on Activity, select but do not
-re-query — only the current month exists in the sample data. The Activity filters (All / Income /
-Expenses / Subscriptions) are real and do filter the list.
+`metro.config.js` blocks `server/` from Metro's crawl, and `tsconfig.json` excludes it
+from the app's type-check. The server is a separate package with its own dependencies
+and its own config; without those two lines Metro walks `server/node_modules` on every
+start and resolves duplicate copies of packages that exist on both sides.
 
-## Known rough edge
-
-`react-hooks/immutability` is disabled in `eslint.config.js`. The React Compiler's immutability rule
-reads Reanimated's `sharedValue.value = withTiming(...)` — the library's documented API — as an
-illegal mutation ([facebook/react#29640](https://github.com/facebook/react/issues/29640)). It is off
-project-wide because shared values are used throughout the design system.
+Archived accounts are excluded from the net-worth total on the Accounts screen and from
+the pickers, but their transactions still resolve and still appear in history. That is
+intentional; it does mean a period summary can include spending from an account the
+headline no longer counts.

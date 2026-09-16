@@ -1,5 +1,5 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 
 import {
@@ -12,8 +12,10 @@ import {
   useCreateAccount,
   useDeleteAccount,
   useUpdateAccount,
+  type Account,
   type AccountType,
 } from '@/api';
+import { QueryState } from '@/components/data/QueryState';
 import { toIconName } from '@/components/icons/registry';
 import { Button, Card, Icon, IconTile, Input, Screen, Text } from '@/components/ui';
 import type { RootStackParamList } from '@/navigation/types';
@@ -27,10 +29,10 @@ const COLOURS = ['#7856F0', '#4C8DFF', '#2BD98C', '#FFB020', '#FF6FB5', '#FF5F6D
 /**
  * Create or edit an account.
  *
- * The opening balance can only be set at creation. After that the balance is the
- * sum of what the ledger says, and a field that lets someone type over it is a
- * field that lets the balance and the transactions disagree — with no way to tell
- * which one is wrong.
+ * The screen waits for the account list before mounting the form, then keys the
+ * form on the account id. That is what lets every field be seeded with a plain
+ * `useState` initialiser rather than an effect that copies the loaded account
+ * into state once it arrives.
  */
 export function AccountFormScreen() {
   const theme = useTheme();
@@ -42,32 +44,55 @@ export function AccountFormScreen() {
   const accountsQuery = useAccounts(true);
   const existing = accountsQuery.data?.find((account) => account.id === accountId);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: editing ? 'Edit account' : 'New account' });
+  }, [navigation, editing]);
+
+  return (
+    <Screen topInset={false} bottomInset={theme.spacing.xxl} testID="account-form">
+      <QueryState
+        isLoading={editing && accountsQuery.isLoading}
+        error={accountsQuery.error}
+        isEmpty={editing && !accountsQuery.isLoading && !existing}
+        onRetry={() => void accountsQuery.refetch()}
+        loadingLabel="Loading the account"
+        empty={{
+          icon: 'wallet',
+          title: 'Account not found',
+          description: 'It may have been deleted on another device.',
+        }}
+      >
+        <AccountForm key={existing?.id ?? 'new'} existing={existing} />
+      </QueryState>
+    </Screen>
+  );
+}
+
+/**
+ * The opening balance can only be set at creation. After that the balance is the
+ * sum of what the ledger says, and a field that lets someone type over it is a
+ * field that lets the balance and the transactions disagree — with no way to
+ * tell which one is wrong.
+ */
+function AccountForm({ existing }: { existing?: Account }) {
+  const theme = useTheme();
+  const navigation = useNavigation();
+  const editing = Boolean(existing);
+  const accountId = existing?.id;
+
   const create = useCreateAccount();
   const update = useUpdateAccount();
   const remove = useDeleteAccount();
   const busy = create.isPending || update.isPending || remove.isPending;
 
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountType>('bank');
-  const [institution, setInstitution] = useState('');
-  const [last4, setLast4] = useState('');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [type, setType] = useState<AccountType>(existing?.type ?? 'bank');
+  const [institution, setInstitution] = useState(existing?.institution ?? '');
+  const [last4, setLast4] = useState(existing?.last4 ?? '');
   const [openingBalance, setOpeningBalance] = useState('');
-  const [color, setColor] = useState(COLOURS[0] as string);
+  const [color, setColor] = useState(existing?.color ?? (COLOURS[0] as string));
   const [error, setError] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ title: editing ? 'Edit account' : 'New account' });
-  }, [navigation, editing]);
-
-  useEffect(() => {
-    if (!existing) return;
-    setName(existing.name);
-    setType(existing.type);
-    setInstitution(existing.institution ?? '');
-    setLast4(existing.last4 ?? '');
-    setColor(existing.color);
-  }, [existing]);
 
   async function handleSave() {
     setError(undefined);
@@ -151,7 +176,7 @@ export function AccountFormScreen() {
   }
 
   return (
-    <Screen topInset={false} bottomInset={theme.spacing.xxl} testID="account-form">
+    <>
       <View style={{ gap: theme.spacing.lg, marginTop: theme.spacing.sm }}>
         <Input
           label="Name"
@@ -349,6 +374,6 @@ export function AccountFormScreen() {
           style={{ alignSelf: 'center', marginTop: theme.spacing.lg }}
         />
       ) : null}
-    </Screen>
+    </>
   );
 }

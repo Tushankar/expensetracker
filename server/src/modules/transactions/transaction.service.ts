@@ -3,8 +3,11 @@ import { Types, type ClientSession, type FilterQuery } from 'mongoose';
 import { ApiError } from '../../lib/ApiError';
 import { pageMeta, type PageMeta } from '../../lib/pagination';
 import { withTransaction } from '../../lib/session';
+import { zoneOrDefault } from '../../lib/time';
 import { adjustBalance, requireOwnedAccount } from '../accounts/account.service';
+import { evaluateBudgets } from '../budgets/budget.service';
 import { requireOwnedCategory } from '../categories/category.service';
+import { UserModel } from '../users/user.model';
 
 import {
   TransactionModel,
@@ -449,4 +452,69 @@ export async function getSummary(
         count: row.count,
       })),
   };
+}
+
+export type DailySpend = {
+  /** `YYYY-MM-DD` in the user's zone. */
+  date: string;
+  expense: number;
+  income: number;
+  count: number;
+};
+
+/**
+ * Spending per day, bucketed in the user's own zone.
+ *
+ * The grouping happens in Mongo via `$dateToString` with a `timezone`, not in
+ * Node after fetching rows. That matters twice over: a month of transactions
+ * never crosses the wire just to be counted, and the day boundary is the user's
+ * local midnight rather than UTC — a 10pm IST purchase belongs to that evening,
+ * not to the next morning.
+ *
+ * Days with nothing spent are absent rather than zero-filled; the calendar knows
+ * which days exist and the caller has fewer rows to carry.
+ */
+export async function getDailySpend(
+  userId: string,
+  range: { from: Date; to: Date },
+): Promise<DailySpend[]> {
+  const user = await UserModel.findById(userId).select('timezone').lean();
+  const timezone = zoneOrDefault(user?.timezone);
+
+  const rows = await TransactionModel.aggregate<{
+    _id: string;
+    expense: number;
+    income: number;
+    count: number;
+  }>([
+    {
+      $match: {
+        userId: new Types.ObjectId(userId),
+        date: { $gte: range.from, $lte: range.to },
+        // Transfers move money without spending it, so a day whose only activity
+        // was an ATM withdrawal must read as a day with no spending.
+        type: { $in: ['expense', 'income'] },
+      },
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone } },
+        expense: {
+          $sum: { $cond: [{ $eq: ['$type', 'expense'] }, '$amount', 0] },
+        },
+        income: {
+          $sum: { $cond: [{ $eq: ['$type', 'income'] }, '$amount', 0] },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
+
+  return rows.map((row) => ({
+    date: row._id,
+    expense: row.expense,
+    income: row.income,
+    count: row.count,
+  }));
 }

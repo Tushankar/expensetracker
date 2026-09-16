@@ -5,11 +5,13 @@ import {
   Badge,
   BottomSheet,
   Button,
+  Calendar,
   Card,
   EmptyState,
   ErrorState,
   Icon,
   Input,
+  Keypad,
   LoadingState,
   Screen,
   SectionHeader,
@@ -19,6 +21,7 @@ import {
   Text,
 } from '@/components/ui';
 import { useTheme, type TypeVariant } from '@/theme';
+import { RUPEE, applyAmountKey, formatAmountInput } from '@/utils/currency';
 
 const TYPE_SAMPLES: { variant: TypeVariant; label: string }[] = [
   { variant: 'display', label: 'Display' },
@@ -52,6 +55,8 @@ export function DesignSystemScreen() {
   const [stateDemo, setStateDemo] = useState<StateDemo>('loading');
   const [email, setEmail] = useState('');
   const [loadingDemo, setLoadingDemo] = useState(false);
+  const [amount, setAmount] = useState('1248');
+  const [day, setDay] = useState(() => new Date());
 
   return (
     <Screen topInset={false} bottomInset={theme.spacing.xxl} testID="design-system-screen">
@@ -183,6 +188,27 @@ export function DesignSystemScreen() {
           <SkeletonRow />
           <SkeletonRow />
           <SkeletonRow />
+        </Card>
+      </View>
+
+      <View style={{ marginTop: theme.spacing.xxxl }}>
+        <SectionHeader title="Amount keypad" />
+        <Card radius="xl">
+          <Text variant="displayLg" align="center" numberOfLines={1} adjustsFontSizeToFit>
+            {`${RUPEE}${formatAmountInput(amount)}`}
+          </Text>
+          <Keypad
+            onKey={(key) => setAmount((current) => applyAmountKey(current, key))}
+            onLongBackspace={() => setAmount('')}
+            style={{ marginTop: theme.spacing.lg }}
+          />
+        </Card>
+      </View>
+
+      <View style={{ marginTop: theme.spacing.xxxl }}>
+        <SectionHeader title="Calendar" />
+        <Card radius="xl">
+          <Calendar value={day} onChange={setDay} />
         </Card>
       </View>
 

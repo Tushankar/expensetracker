@@ -1,0 +1,25 @@
+{
+  // The checks in here run under Node, not React Native: they import the app's own
+  // modules and assert on them. Splitting the config is what lets `node:assert`
+  // resolve without pulling Node's globals into the app's type-check, where
+  // `Buffer` and Node's `setTimeout` signature do not belong.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ESNext"],
+    "noEmit": true,
+    "paths": {
+      "@/*": ["../src/*"],
+      // Native bindings with no JS fallback — importing them outside a React
+      // Native runtime throws. The stubs provide the handful of calls the API
+      // layer actually makes.
+      "expo-secure-store": ["./stubs/expo-secure-store.ts"],
+      "expo-constants": ["./stubs/expo-constants.ts"],
+      "react-native": ["./stubs/react-native.ts"]
+    }
+  },
+  // The parent excludes this directory so the app's type-check skips it; that
+  // exclusion is inherited, so it has to be cleared here.
+  "exclude": [],
+  "include": ["**/*.ts"]
+}

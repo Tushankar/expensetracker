@@ -11,7 +11,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -42,13 +42,12 @@ export default function App() {
 
   const restore = useAuthStore((state) => state.restore);
   const authStatus = useAuthStore((state) => state.status);
-  const [restoreStarted, setRestoreStarted] = useState(false);
 
+  // `restore` is a stable zustand action, so this runs exactly once. It moves the
+  // store out of `restoring` when it finishes, which is what releases the splash.
   useEffect(() => {
-    if (restoreStarted) return;
-    setRestoreStarted(true);
     void restore();
-  }, [restore, restoreStarted]);
+  }, [restore]);
 
   // A font that fails to download should degrade to the system face, not block the
   // app behind a splash screen forever. Reading the keychain is held for, though —

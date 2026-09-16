@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import { errorMessage, isApiError, useUpdateProfile } from '@/api';
@@ -12,24 +12,22 @@ export type EditProfileSheetProps = {
   onClose: () => void;
 };
 
-/** Name and currency. The email is the account's identity and is not editable here. */
+/**
+ * Name and currency. The email is the account's identity and is not editable here.
+ *
+ * The caller passes a `key` that changes each time the sheet is opened, so the
+ * fields below start from the current profile without an effect that copies props
+ * into state every time either one changes.
+ */
 export function EditProfileSheet({ visible, onClose }: EditProfileSheetProps) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const update = useUpdateProfile();
 
-  const [name, setName] = useState('');
-  const [currency, setCurrency] = useState('INR');
+  const [name, setName] = useState(user?.name ?? '');
+  const [currency, setCurrency] = useState(user?.currency ?? 'INR');
   const [error, setError] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!visible) return;
-    setName(user?.name ?? '');
-    setCurrency(user?.currency ?? 'INR');
-    setError(undefined);
-    setFieldErrors({});
-  }, [visible, user]);
 
   async function handleSave() {
     setError(undefined);

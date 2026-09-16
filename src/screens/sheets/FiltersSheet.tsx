@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useAccounts, useCategories, type PaymentMethod } from '@/api';
@@ -16,8 +16,7 @@ import {
   type SegmentOption,
 } from '@/components/ui';
 import { categoryColor, useTheme } from '@/theme';
-import { RUPEE, rupeesToPaise } from '@/utils/currency';
-import { paiseToRupeeInput } from '@/utils/currency';
+import { RUPEE, paiseToRupeeInput, rupeesToPaise } from '@/utils/currency';
 import { tapFeedback } from '@/utils/haptics';
 
 export type Filters = {
@@ -54,19 +53,18 @@ export type FiltersSheetProps = {
 export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetProps) {
   const theme = useTheme();
 
+  // Seeded once per open — the caller's `key` changes each time the sheet is
+  // shown, so there is no effect copying `value` into state on every render.
   const [draft, setDraft] = useState<Filters>(value);
-  const [minText, setMinText] = useState('');
-  const [maxText, setMaxText] = useState('');
+  const [minText, setMinText] = useState(() =>
+    value.minAmount === undefined ? '' : paiseToRupeeInput(value.minAmount),
+  );
+  const [maxText, setMaxText] = useState(() =>
+    value.maxAmount === undefined ? '' : paiseToRupeeInput(value.maxAmount),
+  );
 
   const accountsQuery = useAccounts();
   const categoriesQuery = useCategories();
-
-  useEffect(() => {
-    if (!visible) return;
-    setDraft(value);
-    setMinText(value.minAmount === undefined ? '' : paiseToRupeeInput(value.minAmount));
-    setMaxText(value.maxAmount === undefined ? '' : paiseToRupeeInput(value.maxAmount));
-  }, [visible, value]);
 
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data?.categories ?? [];

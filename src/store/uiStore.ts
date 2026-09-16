@@ -9,6 +9,15 @@ export type EntrySheetState =
 
 type UiState = {
   entrySheet: EntrySheetState;
+  /**
+   * Bumped every time the sheet opens, and used as its React `key`.
+   *
+   * Remounting on open is how the form starts empty without an effect that resets
+   * a dozen `useState`s — and because the counter only changes on the way *in*,
+   * the closing animation still plays over the form the user was just looking at
+   * rather than over a blank one.
+   */
+  entrySession: number;
   openAddSheet: (type?: TransactionType) => void;
   openEditSheet: (transaction: Transaction) => void;
   closeEntrySheet: () => void;
@@ -47,9 +56,18 @@ type UiState = {
  */
 export const useUiStore = create<UiState>((set) => ({
   entrySheet: { mode: 'closed' },
+  entrySession: 0,
 
-  openAddSheet: (type = 'expense') => set({ entrySheet: { mode: 'create', type } }),
-  openEditSheet: (transaction) => set({ entrySheet: { mode: 'edit', transaction } }),
+  openAddSheet: (type = 'expense') =>
+    set((state) => ({
+      entrySheet: { mode: 'create', type },
+      entrySession: state.entrySession + 1,
+    })),
+  openEditSheet: (transaction) =>
+    set((state) => ({
+      entrySheet: { mode: 'edit', transaction },
+      entrySession: state.entrySession + 1,
+    })),
   closeEntrySheet: () => set({ entrySheet: { mode: 'closed' } }),
 
   lastUsed: {},

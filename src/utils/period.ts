@@ -1,6 +1,22 @@
-import type { Period } from '@/components/home/SpendingOverview';
-
 import { monthLabel, monthRangeLabel } from './date';
+
+/**
+ * The windows the app can summarise over.
+ *
+ * Declared here rather than beside the card that renders the chips, because the
+ * range maths is the primary thing and the chips are one way of choosing it —
+ * a utility reaching back into a component for a type is the dependency pointing
+ * the wrong way.
+ */
+export type Period = 'month' | 'last' | '3m' | '6m' | 'year';
+
+export const PERIOD_OPTIONS: readonly { value: Period; label: string }[] = [
+  { value: 'month', label: 'This Month' },
+  { value: 'last', label: 'Last Month' },
+  { value: '3m', label: '3 Months' },
+  { value: '6m', label: '6 Months' },
+  { value: 'year', label: 'This Year' },
+];
 
 export type Range = {
   /** Inclusive start, ISO. */

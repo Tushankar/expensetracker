@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import {
@@ -28,7 +28,7 @@ import {
   type SegmentOption,
 } from '@/components/ui';
 import { AccountPicker, CategoryPicker, DatePicker, MethodPicker } from '@/screens/sheets/pickers';
-import { useUiStore } from '@/store/uiStore';
+import { useUiStore, type EntrySheetState } from '@/store/uiStore';
 import { categoryColor, useTheme } from '@/theme';
 import {
   RUPEE,
@@ -46,6 +46,12 @@ const KIND_OPTIONS: readonly SegmentOption<TransactionType>[] = [
   { value: 'transfer', label: 'Transfer' },
 ];
 
+/**
+ * Both bodies use the same height, so swapping to a picker does not resize the
+ * sheet under the user's finger.
+ */
+const SHEET_HEIGHT_RATIO = 0.92;
+
 /** Which panel the sheet is showing. `form` is the amount pad. */
 type Step = 'form' | 'category' | 'account' | 'destination' | 'method' | 'date';
 
@@ -60,18 +66,31 @@ const STEP_TITLE: Record<Exclude<Step, 'form'>, string> = {
 /**
  * The add / edit transaction sheet.
  *
- * The whole design serves one number: how many gestures it takes to record a
- * ₹40 chai. Open, type, save — three, because the amount pad is already on screen
- * and the category, account and method default to whatever was used last. The
+ * Remounted on every open via the store's session counter, so the form starts
+ * clean without a dozen `setState` calls in an effect — and because the counter
+ * only moves on the way in, the exit animation still plays over the filled form.
+ */
+export function AddTransactionSheet() {
+  const sheet = useUiStore((state) => state.entrySheet);
+  const session = useUiStore((state) => state.entrySession);
+
+  return <EntrySheet key={session} sheet={sheet} />;
+}
+
+/**
+ * The form itself.
+ *
+ * The whole design serves one number: how many gestures it takes to record a ₹40
+ * chai. Open, type, save — three, because the amount pad is already on screen and
+ * the category, account and method fall back to whatever was used last. The
  * pickers are one tap away for the times it is something else, and everything
  * optional (merchant, note, date) is a row you can ignore forever.
  *
  * Pickers swap the sheet's body rather than opening a second sheet; see the note
  * in `pickers.tsx` for why.
  */
-export function AddTransactionSheet() {
+function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
   const theme = useTheme();
-  const sheet = useUiStore((state) => state.entrySheet);
   const close = useUiStore((state) => state.closeEntrySheet);
   const lastUsed = useUiStore((state) => state.lastUsed);
   const rememberChoice = useUiStore((state) => state.rememberChoice);
@@ -80,17 +99,34 @@ export function AddTransactionSheet() {
   const open = sheet.mode !== 'closed';
 
   const [step, setStep] = useState<Step>('form');
-  const [type, setType] = useState<TransactionType>('expense');
-  const [amount, setAmount] = useState('');
-  const [categoryId, setCategoryId] = useState<string | undefined>();
-  const [accountId, setAccountId] = useState<string | undefined>();
-  const [destinationId, setDestinationId] = useState<string | undefined>();
-  const [method, setMethod] = useState<PaymentMethod>('upi');
-  const [date, setDate] = useState(() => new Date());
-  const [merchant, setMerchant] = useState('');
-  const [note, setNote] = useState('');
-  const [showDetails, setShowDetails] = useState(false);
+  const [type, setType] = useState<TransactionType>(
+    sheet.mode === 'edit' ? sheet.transaction.type : sheet.mode === 'create' ? sheet.type : 'expense',
+  );
+  const [amount, setAmount] = useState(editing ? paiseToRupeeInput(editing.amount) : '');
+  const [date, setDate] = useState(() => (editing ? new Date(editing.date) : new Date()));
+  const [merchant, setMerchant] = useState(editing?.merchant ?? '');
+  const [note, setNote] = useState(editing?.description ?? '');
+  const [showDetails, setShowDetails] = useState(
+    Boolean(editing?.merchant || editing?.description),
+  );
   const [error, setError] = useState<string | undefined>();
+
+  /**
+   * Explicit choices only.
+   *
+   * `undefined` means "whatever the default works out to", which is resolved
+   * below from data that arrives asynchronously. Storing the resolved value
+   * instead would need an effect to fill it in once the accounts load, and that
+   * effect is exactly the cascading-render pattern React now warns about.
+   */
+  const [categoryPick, setCategoryPick] = useState<string | undefined>(
+    editing?.categoryId ?? undefined,
+  );
+  const [accountPick, setAccountPick] = useState<string | undefined>(editing?.accountId);
+  const [destinationPick, setDestinationPick] = useState<string | undefined>(
+    editing?.destinationAccountId ?? undefined,
+  );
+  const [methodPick, setMethodPick] = useState<PaymentMethod | undefined>(editing?.paymentMethod);
 
   const accountsQuery = useAccounts();
   const categoriesQuery = useCategories(type === 'transfer' ? undefined : type);
@@ -105,74 +141,43 @@ export function AddTransactionSheet() {
     [categoriesQuery.data, type],
   );
 
+  const remembered = lastUsed[type];
+
+  const exists = (list: { id: string }[], id?: string) =>
+    Boolean(id) && list.some((entry) => entry.id === id);
+
+  // An explicit pick wins, then the last thing used for this type, then the first
+  // option. Each fallback is only consulted when the one above it is not available.
+  const accountId = exists(accounts, accountPick)
+    ? accountPick
+    : exists(accounts, remembered?.accountId)
+      ? remembered?.accountId
+      : accounts[0]?.id;
+
+  const destinationId =
+    type !== 'transfer'
+      ? undefined
+      : exists(accounts, destinationPick) && destinationPick !== accountId
+        ? destinationPick
+        : exists(accounts, remembered?.destinationAccountId) &&
+            remembered?.destinationAccountId !== accountId
+          ? remembered?.destinationAccountId
+          : accounts.find((entry) => entry.id !== accountId)?.id;
+
+  const categoryId =
+    type === 'transfer'
+      ? undefined
+      : exists(categories, categoryPick)
+        ? categoryPick
+        : exists(categories, remembered?.categoryId)
+          ? remembered?.categoryId
+          : categories[0]?.id;
+
+  const method = methodPick ?? remembered?.paymentMethod ?? 'upi';
+
   const account = accounts.find((entry) => entry.id === accountId);
   const destination = accounts.find((entry) => entry.id === destinationId);
   const category = categories.find((entry) => entry.id === categoryId);
-
-  /**
-   * Fills the form when the sheet opens.
-   *
-   * Two different jobs: an edit loads the transaction, and a create loads the
-   * defaults. Keyed on `open` so reopening always starts clean rather than
-   * inheriting whatever half-typed amount was abandoned last time.
-   */
-  useEffect(() => {
-    if (!open) return;
-
-    if (sheet.mode === 'edit') {
-      const transaction = sheet.transaction;
-      setType(transaction.type);
-      setAmount(paiseToRupeeInput(transaction.amount));
-      setCategoryId(transaction.categoryId ?? undefined);
-      setAccountId(transaction.accountId);
-      setDestinationId(transaction.destinationAccountId ?? undefined);
-      setMethod(transaction.paymentMethod);
-      setDate(new Date(transaction.date));
-      setMerchant(transaction.merchant);
-      setNote(transaction.description);
-      setShowDetails(Boolean(transaction.merchant || transaction.description));
-    } else {
-      setType(sheet.type);
-      setAmount('');
-      setMerchant('');
-      setNote('');
-      setShowDetails(false);
-      setDate(new Date());
-    }
-
-    setStep('form');
-    setError(undefined);
-  }, [open, sheet]);
-
-  // Defaults land once the data is in, and never overwrite an explicit choice.
-  useEffect(() => {
-    if (!open || sheet.mode === 'edit') return;
-
-    const remembered = lastUsed[type];
-
-    setAccountId((current) => {
-      if (current && accounts.some((entry) => entry.id === current)) return current;
-      const preferred = accounts.find((entry) => entry.id === remembered?.accountId);
-      return preferred?.id ?? accounts[0]?.id;
-    });
-
-    if (type === 'transfer') {
-      setDestinationId((current) => {
-        if (current && accounts.some((entry) => entry.id === current)) return current;
-        const preferred = accounts.find((entry) => entry.id === remembered?.destinationAccountId);
-        return preferred?.id ?? accounts[1]?.id;
-      });
-      setCategoryId(undefined);
-    } else {
-      setCategoryId((current) => {
-        if (current && categories.some((entry) => entry.id === current)) return current;
-        const preferred = categories.find((entry) => entry.id === remembered?.categoryId);
-        return preferred?.id ?? categories[0]?.id;
-      });
-    }
-
-    if (remembered?.paymentMethod) setMethod(remembered.paymentMethod);
-  }, [open, sheet.mode, type, accounts, categories, lastUsed]);
 
   const handleClose = useCallback(() => {
     close();
@@ -188,39 +193,26 @@ export function AddTransactionSheet() {
   function handleTypeChange(next: TransactionType) {
     setType(next);
     // A category belongs to one side of the ledger, so it cannot survive the
-    // switch. Clearing it lets the defaults effect pick the right one.
-    setCategoryId(undefined);
+    // switch. Clearing the pick lets the default resolve against the new list.
+    setCategoryPick(undefined);
     setError(undefined);
   }
 
   const paise = rupeesToPaise(amount);
 
+  function fail(message: string) {
+    setError(message);
+    errorFeedback();
+  }
+
   async function handleSubmit() {
-    if (paise <= 0) {
-      setError('Enter an amount greater than zero');
-      errorFeedback();
-      return;
-    }
-    if (!accountId) {
-      setError('Pick an account');
-      errorFeedback();
-      return;
-    }
-    if (type === 'transfer' && !destinationId) {
-      setError('Pick an account to transfer into');
-      errorFeedback();
-      return;
-    }
+    if (paise <= 0) return fail('Enter an amount greater than zero');
+    if (!accountId) return fail('Pick an account');
+    if (type === 'transfer' && !destinationId) return fail('Pick an account to transfer into');
     if (type === 'transfer' && destinationId === accountId) {
-      setError('Transfer between two different accounts');
-      errorFeedback();
-      return;
+      return fail('Transfer between two different accounts');
     }
-    if (type !== 'transfer' && !categoryId) {
-      setError('Pick a category');
-      errorFeedback();
-      return;
-    }
+    if (type !== 'transfer' && !categoryId) return fail('Pick a category');
 
     const base = {
       amount: paise,
@@ -279,7 +271,7 @@ export function AddTransactionSheet() {
         onClose={() => setStep('form')}
         title={STEP_TITLE[step]}
         subtitle={`${RUPEE}${formatAmountInput(amount)}`}
-        maxHeightRatio={0.88}
+        maxHeightRatio={SHEET_HEIGHT_RATIO}
       >
         <PickerPanel
           step={step}
@@ -291,16 +283,16 @@ export function AddTransactionSheet() {
           method={method}
           date={date}
           onPickCategory={(picked: Category) => {
-            setCategoryId(picked.id);
+            setCategoryPick(picked.id);
             setStep('form');
           }}
           onPickAccount={(picked: Account) => {
-            if (step === 'destination') setDestinationId(picked.id);
-            else setAccountId(picked.id);
+            if (step === 'destination') setDestinationPick(picked.id);
+            else setAccountPick(picked.id);
             setStep('form');
           }}
           onPickMethod={(picked) => {
-            setMethod(picked);
+            setMethodPick(picked);
             setStep('form');
           }}
           onPickDate={(picked) => {
@@ -318,7 +310,7 @@ export function AddTransactionSheet() {
       visible={open}
       onClose={handleClose}
       title={editing ? 'Edit transaction' : 'New transaction'}
-      maxHeightRatio={0.94}
+      maxHeightRatio={SHEET_HEIGHT_RATIO}
       footer={
         <View style={{ gap: theme.spacing.sm }}>
           {error ? (
@@ -342,7 +334,7 @@ export function AddTransactionSheet() {
           ) : null}
           <Button
             label={actionLabel}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
             variant="brand"
             size="lg"
             fullWidth
@@ -389,7 +381,6 @@ export function AddTransactionSheet() {
             {type === 'transfer' ? (
               <>
                 <Selector
-                  flex
                   label="From"
                   value={account?.name ?? 'Pick'}
                   icon={toIconName(account?.icon)}
@@ -400,7 +391,6 @@ export function AddTransactionSheet() {
                   <Icon name="arrowRight" size={16} color={theme.colors.textTertiary} />
                 </View>
                 <Selector
-                  flex
                   label="To"
                   value={destination?.name ?? 'Pick'}
                   icon={toIconName(destination?.icon)}
@@ -411,7 +401,6 @@ export function AddTransactionSheet() {
             ) : (
               <>
                 <Selector
-                  flex
                   label="Category"
                   value={category?.name ?? 'Pick'}
                   icon={toIconName(category?.icon)}
@@ -419,7 +408,6 @@ export function AddTransactionSheet() {
                   onPress={() => setStep('category')}
                 />
                 <Selector
-                  flex
                   label="Account"
                   value={account?.name ?? 'Pick'}
                   icon={toIconName(account?.icon)}
@@ -432,14 +420,12 @@ export function AddTransactionSheet() {
 
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
             <Selector
-              flex
               label="Date"
               value={formatDayLabel(date.toISOString())}
               icon="calendar"
               onPress={() => setStep('date')}
             />
             <Selector
-              flex
               label="Method"
               value={PAYMENT_METHOD_LABEL[method]}
               icon="card"
@@ -508,12 +494,11 @@ type SelectorProps = {
   value: string;
   icon: ReturnType<typeof toIconName>;
   tint?: string;
-  flex?: boolean;
   onPress: () => void;
 };
 
 /** One tappable slot on the entry form: a tinted glyph, a label and the choice. */
-function Selector({ label, value, icon, tint, flex, onPress }: SelectorProps) {
+function Selector({ label, value, icon, tint, onPress }: SelectorProps) {
   const theme = useTheme();
 
   return (
@@ -526,7 +511,7 @@ function Selector({ label, value, icon, tint, flex, onPress }: SelectorProps) {
       accessibilityLabel={`${label}, ${value}`}
       accessibilityHint="Opens the picker"
       style={({ pressed }) => ({
-        flex: flex ? 1 : undefined,
+        flex: 1,
         minWidth: 0,
         flexDirection: 'row',
         alignItems: 'center',

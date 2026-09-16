@@ -5,7 +5,6 @@ import type { Account, Category, PaymentMethod } from '@/api/types';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL } from '@/api/types';
 import { toIconName } from '@/components/icons/registry';
 import {
-  Badge,
   Calendar,
   Divider,
   EmptyState,
@@ -317,9 +316,4 @@ export function DatePicker({ value, onSelect }: DatePickerProps) {
       <Calendar value={value} onChange={onSelect} />
     </View>
   );
-}
-
-/** Small helper used by the entry sheet's summary line. */
-export function SelectionBadge({ label, tone }: { label: string; tone?: 'brand' | 'neutral' }) {
-  return <Badge label={label} tone={tone ?? 'neutral'} />;
 }

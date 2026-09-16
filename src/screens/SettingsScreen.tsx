@@ -45,6 +45,17 @@ export function SettingsScreen() {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  /**
+   * Bumped on open and used as each sheet's `key`, so its fields are seeded fresh
+   * from the current profile. Because it only changes on the way in, the closing
+   * animation still plays over the form the user was looking at.
+   */
+  const [sheetSession, setSheetSession] = useState(0);
+
+  function openSheet(open: (value: true) => void) {
+    setSheetSession((current) => current + 1);
+    open(true);
+  }
 
   const version = Constants.expoConfig?.version ?? '1.0.0';
   const profile = sessionQuery.data ?? user;
@@ -105,7 +116,7 @@ export function SettingsScreen() {
                 subtitle="Your name and currency"
                 leading={<IconTile name="user" color={theme.colors.textTertiary} />}
                 showChevron
-                onPress={() => setProfileOpen(true)}
+                onPress={() => openSheet(setProfileOpen)}
               />
               <Divider inset={44 + theme.spacing.md} />
               <ListRow
@@ -113,7 +124,7 @@ export function SettingsScreen() {
                 subtitle="Signs out every other device"
                 leading={<IconTile name="lock" color={theme.colors.textTertiary} />}
                 showChevron
-                onPress={() => setPasswordOpen(true)}
+                onPress={() => openSheet(setPasswordOpen)}
               />
               <Divider inset={44 + theme.spacing.md} />
               <ListRow
@@ -236,8 +247,16 @@ export function SettingsScreen() {
         </Text>
       </Screen>
 
-      <EditProfileSheet visible={profileOpen} onClose={() => setProfileOpen(false)} />
-      <ChangePasswordSheet visible={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <EditProfileSheet
+        key={`profile-${sheetSession}`}
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+      />
+      <ChangePasswordSheet
+        key={`password-${sheetSession}`}
+        visible={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+      />
     </>
   );
 }

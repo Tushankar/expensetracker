@@ -8,8 +8,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json",
+    "lint": "expo lint",
+    "verify": "tsx --tsconfig scripts/tsconfig.json scripts/verify.ts && tsx --tsconfig scripts/tsconfig.json scripts/client.test.ts",
+    "server": "npm --prefix server run dev",
+    "server:seed": "npm --prefix server run seed",
+    "server:test": "npm --prefix server run test:api",
+    "verify:e2e": "tsx --tsconfig scripts/tsconfig.json scripts/e2e.test.ts"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -41,9 +46,11 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/node": "^22.20.3",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   }
 }

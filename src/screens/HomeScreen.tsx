@@ -19,7 +19,6 @@ import {
   QuickActions,
   SavingsCard,
   SpendingOverview,
-  type Period,
 } from '@/components/home';
 import { TransactionRow } from '@/components/transactions';
 import { Card, Divider, Screen, SectionHeader, Skeleton, SkeletonRow } from '@/components/ui';
@@ -27,7 +26,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { categoryColor, useTheme, type ActionHue } from '@/theme';
 import type { CategorySlice, PeriodSummary } from '@/types/models';
-import { periodRange } from '@/utils/period';
+import { periodRange, type Period } from '@/utils/period';
 
 /** Enough rows to show the shape of the month without turning Home into a ledger. */
 const RECENT_COUNT = 5;
@@ -70,7 +69,9 @@ export function HomeScreen() {
   const contentWidth =
     Math.min(width, theme.layout.maxContentWidth) - theme.layout.screenGutter * 2;
 
-  const accounts = accountsQuery.data ?? [];
+  // Memoised rather than defaulted inline: a fresh `[]` on every render would
+  // invalidate every `useMemo` below it, which is most of this screen.
+  const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const summary = summaryQuery.data;
   const previous = previousQuery.data;
 

@@ -14,7 +14,7 @@ import {
 } from '@/api';
 import { ActivitySummaryCard } from '@/components/activity/ActivitySummaryCard';
 import { QueryState } from '@/components/data/QueryState';
-import { PERIODS, type Period } from '@/components/home';
+import { PERIODS } from '@/components/home';
 import { TransactionGroups } from '@/components/transactions';
 import {
   Badge,
@@ -33,7 +33,7 @@ import { FiltersSheet, type Filters } from '@/screens/sheets/FiltersSheet';
 import { useUiStore } from '@/store/uiStore';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
-import { periodRange } from '@/utils/period';
+import { periodRange, type Period } from '@/utils/period';
 
 type Kind = 'all' | TransactionType;
 
@@ -76,6 +76,14 @@ export function TransactionsScreen() {
   const [debounced, setDebounced] = useState('');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Bumped on open and used as the sheet's `key`, so its draft is seeded from the
+  // filters currently in force rather than copied in by an effect.
+  const [filtersSession, setFiltersSession] = useState(0);
+
+  function openFilters() {
+    setFiltersSession((current) => current + 1);
+    setFiltersOpen(true);
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), SEARCH_DEBOUNCE_MS);
@@ -164,10 +172,6 @@ export function TransactionsScreen() {
             progressBackgroundColor={theme.colors.surface}
           />
         }
-        // Paging happens on scroll rather than behind a "load more" button; the
-        // threshold is generous so the next page is usually there before the
-        // bottom of the list is.
-        contentContainerStyle={undefined}
       >
         <PageHeader
           title="Activity"
@@ -199,7 +203,7 @@ export function TransactionsScreen() {
                       : 'Filter transactions'
                   }
                   variant="surface"
-                  onPress={() => setFiltersOpen(true)}
+                  onPress={openFilters}
                 />
                 {activeFilterCount > 0 ? (
                   <View
@@ -337,6 +341,7 @@ export function TransactionsScreen() {
       </Screen>
 
       <FiltersSheet
+        key={filtersSession}
         visible={filtersOpen}
         value={filters}
         onClose={() => setFiltersOpen(false)}

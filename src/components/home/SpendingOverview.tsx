@@ -5,16 +5,10 @@ import { Card, ChipRow, EmptyState, Icon, SectionHeader, Text, type Chip } from 
 import { useTheme } from '@/theme';
 import type { CategorySlice, PeriodSummary } from '@/types/models';
 import { formatCompactINR, formatINR, percentChange } from '@/utils/currency';
+import { PERIOD_OPTIONS, type Period } from '@/utils/period';
 
-export type Period = 'month' | 'last' | '3m' | '6m' | 'year';
-
-export const PERIODS: readonly Chip<Period>[] = [
-  { value: 'month', label: 'This Month' },
-  { value: 'last', label: 'Last Month' },
-  { value: '3m', label: '3 Months' },
-  { value: '6m', label: '6 Months' },
-  { value: 'year', label: 'This Year' },
-];
+/** The chips, typed for `ChipRow`. The options themselves live with the range maths. */
+export const PERIODS: readonly Chip<Period>[] = PERIOD_OPTIONS;
 
 export type SpendingOverviewProps = {
   summary: PeriodSummary;
