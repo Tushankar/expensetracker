@@ -1,4 +1,4 @@
-import { Schema, Types, model, type InferSchemaType } from 'mongoose';
+import { Schema, model, type InferSchemaType } from 'mongoose';
 
 export const CATEGORY_TYPES = ['expense', 'income', 'transfer'] as const;
 export type CategoryType = (typeof CATEGORY_TYPES)[number];
@@ -11,7 +11,7 @@ const categorySchema = new Schema(
      * `{ $or: [{ userId: null }, { userId: me }] }` — which is also why a user
      * can never see, edit or delete someone else's.
      */
-    userId: { type: Types.ObjectId, ref: 'User', default: null, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     name: { type: String, required: true, trim: true, maxlength: 60 },
     /**
      * The heading this sits under — Food, Transport, Home. The Indian default set

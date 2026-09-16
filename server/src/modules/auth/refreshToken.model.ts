@@ -1,4 +1,4 @@
-import { Schema, Types, model, type InferSchemaType } from 'mongoose';
+import { Schema, model, type InferSchemaType } from 'mongoose';
 
 /**
  * One row per issued refresh token.
@@ -10,7 +10,7 @@ import { Schema, Types, model, type InferSchemaType } from 'mongoose';
  */
 const refreshTokenSchema = new Schema(
   {
-    userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     /** SHA-256 of the token. The token itself is never stored. */
     tokenHash: { type: String, required: true, unique: true },
     /** The `jti` claim, so rotation can point a revoked row at its successor. */

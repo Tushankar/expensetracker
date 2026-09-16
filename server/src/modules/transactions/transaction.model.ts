@@ -1,4 +1,4 @@
-import { Schema, Types, model, type InferSchemaType } from 'mongoose';
+import { Schema, model, type InferSchemaType } from 'mongoose';
 
 export const TRANSACTION_TYPES = ['expense', 'income', 'transfer'] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
@@ -17,7 +17,7 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 const transactionSchema = new Schema(
   {
-    userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: { type: String, required: true, enum: TRANSACTION_TYPES },
     /**
      * Integer paise, always positive. `type` carries the direction — storing a
@@ -29,10 +29,10 @@ const transactionSchema = new Schema(
      * Null on a transfer. Moving your own money between your own accounts is not
      * spending, so it has no spending category — see the note in the service.
      */
-    categoryId: { type: Types.ObjectId, ref: 'Category', default: null },
-    accountId: { type: Types.ObjectId, ref: 'Account', required: true },
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account', required: true },
     /** Required on a transfer, forbidden otherwise. Enforced in the schema layer. */
-    destinationAccountId: { type: Types.ObjectId, ref: 'Account', default: null },
+    destinationAccountId: { type: Schema.Types.ObjectId, ref: 'Account', default: null },
     merchant: { type: String, trim: true, maxlength: 120, default: '' },
     description: { type: String, trim: true, maxlength: 500, default: '' },
     paymentMethod: { type: String, enum: PAYMENT_METHODS, default: 'upi' },

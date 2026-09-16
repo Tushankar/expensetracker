@@ -1,11 +1,11 @@
-import { Schema, Types, model, type InferSchemaType } from 'mongoose';
+import { Schema, model, type InferSchemaType } from 'mongoose';
 
 export const ACCOUNT_TYPES = ['bank', 'cash', 'credit_card', 'wallet', 'savings', 'other'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 const accountSchema = new Schema(
   {
-    userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 60 },
     type: { type: String, required: true, enum: ACCOUNT_TYPES },
     /**
