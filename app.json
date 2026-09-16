@@ -1,18 +1,20 @@
 {
   "expo": {
-    "name": "expensetracker",
+    "name": "Paisa",
     "slug": "expensetracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expensetracker",
-    "userInterfaceStyle": "automatic",
+    "scheme": "paisa",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07060F",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#7856F0",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -20,23 +22,35 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#07060F",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-system-ui",
+        {
+          "userInterfaceStyle": "dark"
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "logoKitToken": "pk_fre363b644541b4396e087",
+      "eas": {
+        "projectId": "d5a30573-3fc3-437c-bca7-b4caeec68bb2"
+      }
+    },
+    "owner": "tushankar_app"
   }
 }
