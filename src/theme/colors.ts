@@ -134,9 +134,15 @@ export const colorsByAccent: Record<AccentId, ColorTokens> = {
   red: build(accents.red),
 };
 
-/** Resolve a spending category's accent. Shared across every theme. */
-export function categoryColor(hue: CategoryHue): string {
-  return categoryHues[hue];
+/**
+ * Resolve a spending category's accent. Shared across every theme.
+ *
+ * Takes a plain string as well as a known hue, because category colours are stored
+ * on the server: a category created by a newer client can name a hue this build
+ * has never heard of, and a chart band with no colour is worse than a grey one.
+ */
+export function categoryColor(hue: CategoryHue | string): string {
+  return categoryHues[hue as CategoryHue] ?? categoryHues.other;
 }
 
 /** Resolve a quick-action tile's fill and the mark that sits on it. */

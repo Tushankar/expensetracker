@@ -1,4 +1,4 @@
-import rateLimit, { type Options } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
 
 import { env } from '../config/env';
 import { ErrorCode } from '../lib/ApiError';
@@ -40,7 +40,10 @@ export const authLimiter = rateLimit({
   keyGenerator: (req) => {
     const body = req.body as { email?: unknown } | undefined;
     const email = typeof body?.email === 'string' ? body.email.toLowerCase().trim() : '';
-    return `${req.ip ?? 'unknown'}:${email}`;
+    // `ipKeyGenerator` collapses an IPv6 address to its /64 prefix. A raw
+    // `req.ip` would give one attacker an effectively unlimited supply of keys,
+    // since a residential IPv6 allocation contains billions of usable addresses.
+    return `${ipKeyGenerator(req.ip ?? 'unknown')}:${email}`;
   },
   skipSuccessfulRequests: true,
 });

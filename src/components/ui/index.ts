@@ -1,6 +1,7 @@
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
+export { Calendar, type CalendarProps } from './Calendar';
 export { Card, type CardProps, type CardVariant } from './Card';
 export { CategoryChip, type CategoryChipProps } from './CategoryChip';
 export { ChipRow, type Chip, type ChipRowProps } from './ChipRow';
@@ -11,6 +12,7 @@ export { Icon, type IconName, type IconProps } from './Icon';
 export { IconButton, type IconButtonProps } from './IconButton';
 export { IconTile, withAlpha, type IconTileProps } from './IconTile';
 export { Input, type InputProps } from './Input';
+export { Keypad, type KeypadProps } from './Keypad';
 export { ListRow, type ListRowProps } from './ListRow';
 export { MerchantAvatar, type MerchantAvatarProps } from './MerchantAvatar';
 export { LoadingState, Spinner, type LoadingStateProps } from './LoadingState';

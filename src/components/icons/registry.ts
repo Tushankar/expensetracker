@@ -320,6 +320,250 @@ export const iconRegistry = {
     { t: 'path', d: 'M2 20h20' },
   ],
   circle: [{ t: 'circle', cx: 12, cy: 12, r: 8.5 }],
+
+  // ----------------------------------------------------- category sub-glyphs
+  // The default category tree is two levels deep — Food › Swiggy, Transport ›
+  // Rapido — and a picker where every row under a heading shares one glyph is a
+  // picker people scan by reading. These exist so the second level is scannable
+  // by shape.
+  coffee: [
+    { t: 'path', d: 'M4 9.5h13v6a4.5 4.5 0 0 1-4.5 4.5h-4A4.5 4.5 0 0 1 4 15.5z' },
+    { t: 'path', d: 'M17 11h1.5a2.75 2.75 0 0 1 0 5.5H17' },
+    { t: 'path', d: 'M8 3v3' },
+    { t: 'path', d: 'M12 3v3' },
+  ],
+  cake: [
+    { t: 'path', d: 'M3.5 21.5h17' },
+    { t: 'path', d: 'M5 21.5v-6a2.5 2.5 0 0 1 2.5-2.5h9a2.5 2.5 0 0 1 2.5 2.5v6' },
+    { t: 'path', d: 'M5 17h14' },
+    { t: 'path', d: 'M12 13v-3.5' },
+    { t: 'path', d: 'M12 6.5h.01' },
+  ],
+  leaf: [
+    { t: 'path', d: 'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z' },
+    { t: 'path', d: 'M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12' },
+  ],
+  milk: [
+    { t: 'path', d: 'M8 2.5h8' },
+    {
+      t: 'path',
+      d: 'M9 2.5v3.3a2 2 0 0 1-.4 1.2L7.4 8.6a2 2 0 0 0-.4 1.2v9.7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9.8a2 2 0 0 0-.4-1.2l-1.2-1.6a2 2 0 0 1-.4-1.2V2.5',
+    },
+    { t: 'path', d: 'M7 13.5h10' },
+  ],
+  meat: [
+    {
+      t: 'path',
+      d: 'M15.5 15.4c-2.1.7-4.3.3-5.7-1.1-2.3-2.3-1.8-6.5 1.2-9.4 2.9-2.9 7.1-3.5 9.4-1.2 1.4 1.4 1.7 3.6 1.1 5.7-1.4-.4-2.9 0-4 1.1s-1.5 2.6-1.1 4z',
+    },
+    {
+      t: 'path',
+      d: 'M11.3 15.6l-2.2 2.2a2.5 2.5 0 1 1-4.6 1.7 2.5 2.5 0 0 1-1.4-4.2 2.5 2.5 0 0 1 3.1-.3l2.2-2.2',
+    },
+  ],
+  beer: [
+    { t: 'path', d: 'M6.5 8.5h9v11a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2z' },
+    { t: 'path', d: 'M15.5 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2' },
+    { t: 'path', d: 'M6.5 8.5V6a2.5 2.5 0 0 1 3.4-2.3A2.6 2.6 0 0 1 15.5 5v3.5' },
+    { t: 'path', d: 'M9.8 12.5v5' },
+    { t: 'path', d: 'M12.2 12.5v5' },
+  ],
+  glass: [
+    { t: 'path', d: 'M7 2.5h10l-1.1 8.7a3.9 3.9 0 0 1-7.8 0z' },
+    { t: 'path', d: 'M12 15v6' },
+    { t: 'path', d: 'M8.5 21.5h7' },
+  ],
+  cigarette: [
+    { t: 'rect', x: 2, y: 13.5, w: 15, h: 5, rx: 1.5 },
+    { t: 'path', d: 'M12.5 13.5v5' },
+    { t: 'path', d: 'M19.5 13.5h2.5v5h-2.5z' },
+    { t: 'path', d: 'M17.5 4.5c1.6 1.2 1.6 3.3 0 4.5' },
+    { t: 'path', d: 'M21 3.5c1.6 1.6 1.6 4.4 0 6' },
+  ],
+
+  bus: [
+    { t: 'rect', x: 3, y: 3, w: 18, h: 14, rx: 2.5 },
+    { t: 'path', d: 'M3 10h18' },
+    { t: 'circle', cx: 7.5, cy: 13.8, r: 1 },
+    { t: 'circle', cx: 16.5, cy: 13.8, r: 1 },
+    { t: 'path', d: 'M6 17v3' },
+    { t: 'path', d: 'M18 17v3' },
+  ],
+  train: [
+    { t: 'rect', x: 4, y: 2.5, w: 16, h: 15, rx: 3 },
+    { t: 'path', d: 'M4 10h16' },
+    { t: 'circle', cx: 8.5, cy: 13.8, r: 1 },
+    { t: 'circle', cx: 15.5, cy: 13.8, r: 1 },
+    { t: 'path', d: 'M8.5 17.5 5.5 21.5' },
+    { t: 'path', d: 'M15.5 17.5l3 4' },
+  ],
+  bike: [
+    { t: 'circle', cx: 5.5, cy: 17.5, r: 3.5 },
+    { t: 'circle', cx: 18.5, cy: 17.5, r: 3.5 },
+    { t: 'circle', cx: 15, cy: 5, r: 1 },
+    { t: 'path', d: 'M12 17.5V14L9 11l4-3 2 3h2' },
+  ],
+  mapPin: [
+    { t: 'path', d: 'M20 10.5c0 6-8 11.5-8 11.5s-8-5.5-8-11.5a8 8 0 0 1 16 0z' },
+    { t: 'circle', cx: 12, cy: 10.5, r: 3 },
+  ],
+  plane: [
+    {
+      t: 'path',
+      d: 'M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L8 11l-2 2-2.5-.3c-.4 0-.7.1-.9.4l-.2.3c-.3.4-.2 1 .2 1.3L6 17l2.3 2.5c.3.4.9.5 1.3.2l.3-.2c.3-.2.4-.5.4-.9L10 16l2-2 2.5 4.3c.3.4.8.5 1.3.3l.5-.3c.4-.2.6-.6.5-1.1z',
+    },
+  ],
+  bed: [
+    { t: 'path', d: 'M2.5 4v16' },
+    { t: 'path', d: 'M2.5 8.5h16a3 3 0 0 1 3 3v8.5' },
+    { t: 'path', d: 'M2.5 16.5h19' },
+    { t: 'circle', cx: 7.5, cy: 12, r: 2 },
+  ],
+  globe: [
+    { t: 'circle', cx: 12, cy: 12, r: 9 },
+    { t: 'path', d: 'M3 12h18' },
+    { t: 'path', d: 'M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z' },
+  ],
+  umbrella: [
+    { t: 'path', d: 'M12 2.5v1.5' },
+    { t: 'path', d: 'M2.5 13a9.5 9.5 0 0 1 19 0z' },
+    { t: 'path', d: 'M12 13v5.5a2.75 2.75 0 0 0 5.5 0' },
+  ],
+
+  droplet: [{ t: 'path', d: 'M12 2.7 6.9 8.3a7.2 7.2 0 1 0 10.2 0z' }],
+  flame: [
+    {
+      t: 'path',
+      d: 'M12 2.5c2.5 3 5.5 5.5 5.5 9.5a5.5 5.5 0 0 1-11 0c0-1.7.6-3 1.6-4.2.4 1 1.1 1.8 2 2.2C10.5 7.5 10.8 4.8 12 2.5z',
+    },
+  ],
+  wifi: [
+    { t: 'path', d: 'M5 12.9a10.4 10.4 0 0 1 14 0' },
+    { t: 'path', d: 'M2 9.4a15.5 15.5 0 0 1 20 0' },
+    { t: 'path', d: 'M8.6 16.2a5.5 5.5 0 0 1 6.8 0' },
+    { t: 'path', d: 'M12 20h.01' },
+  ],
+  tv: [
+    { t: 'rect', x: 2, y: 7, w: 20, h: 13, rx: 2.5 },
+    { t: 'path', d: 'M7.5 3.5 12 7l4.5-3.5' },
+  ],
+  wrench: [
+    {
+      t: 'path',
+      d: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-8z',
+    },
+  ],
+
+  shirt: [
+    {
+      t: 'path',
+      d: 'M20.4 3.5 16 2a4 4 0 0 1-8 0L3.6 3.5a2 2 0 0 0-1.3 2.2l.6 3.5a1 1 0 0 0 1 .8H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.1a1 1 0 0 0 1-.8l.6-3.5a2 2 0 0 0-1.3-2.2z',
+    },
+  ],
+  laptop: [
+    { t: 'rect', x: 3.5, y: 4.5, w: 17, h: 11, rx: 2 },
+    { t: 'path', d: 'M1.5 19.5h21' },
+  ],
+  package: [
+    { t: 'path', d: 'M7.5 4.3 16.5 9.4' },
+    {
+      t: 'path',
+      d: 'M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z',
+    },
+    { t: 'path', d: 'M3.3 7 12 12l8.7-5' },
+    { t: 'path', d: 'M12 22V12' },
+  ],
+  gift: [
+    { t: 'rect', x: 3, y: 8, w: 18, h: 4, rx: 1 },
+    { t: 'path', d: 'M12 8v13' },
+    { t: 'path', d: 'M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7' },
+    { t: 'path', d: 'M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 5.5 12 8' },
+    { t: 'path', d: 'M16.5 8a2.5 2.5 0 0 0 0-5C14 3 12 5.5 12 8' },
+  ],
+  ticket: [
+    {
+      t: 'path',
+      d: 'M2 9.5V7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z',
+    },
+    { t: 'path', d: 'M13 5v2' },
+    { t: 'path', d: 'M13 11v2' },
+    { t: 'path', d: 'M13 17v2' },
+  ],
+  music: [
+    { t: 'path', d: 'M9 18V5l12-2v13' },
+    { t: 'circle', cx: 6, cy: 18, r: 3 },
+    { t: 'circle', cx: 18, cy: 16, r: 3 },
+  ],
+  gamepad: [
+    { t: 'path', d: 'M6 11h4' },
+    { t: 'path', d: 'M8 9v4' },
+    { t: 'path', d: 'M15 12h.01' },
+    { t: 'path', d: 'M18 10h.01' },
+    {
+      t: 'path',
+      d: 'M17.3 5H6.7a4 4 0 0 0-4 3.6C2.6 9.4 2 14.5 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.4-1.4a2 2 0 0 1 1.4-.6h4.4a2 2 0 0 1 1.4.6L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.5-.6-6.6-.7-7.3A4 4 0 0 0 17.3 5z',
+    },
+  ],
+
+  pill: [
+    { t: 'path', d: 'M10.5 20.5a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a5.5 5.5 0 0 1 7.8 7.8z' },
+    { t: 'path', d: 'M7.1 7.1l9.8 9.8' },
+  ],
+  flask: [
+    { t: 'path', d: 'M9.5 2.5h5' },
+    {
+      t: 'path',
+      d: 'M10.5 2.5v6.2a2 2 0 0 1-.3 1.1l-5.4 8.6a2 2 0 0 0 1.7 3.1h11a2 2 0 0 0 1.7-3.1l-5.4-8.6a2 2 0 0 1-.3-1.1V2.5',
+    },
+    { t: 'path', d: 'M7.2 15.5h9.6' },
+  ],
+  dumbbell: [
+    { t: 'path', d: 'M3.5 9v6' },
+    { t: 'path', d: 'M6.5 6.5v11' },
+    { t: 'path', d: 'M17.5 6.5v11' },
+    { t: 'path', d: 'M20.5 9v6' },
+    { t: 'path', d: 'M6.5 12h11' },
+  ],
+  heart: [
+    {
+      t: 'path',
+      d: 'M19 13.5c1.5-1.5 3-3.2 3-5.5a5.2 5.2 0 0 0-5.2-5.2c-1.8 0-3 .5-4.8 2-1.8-1.5-3-2-4.8-2A5.2 5.2 0 0 0 2 8c0 2.3 1.5 4 3 5.5l7 7z',
+    },
+  ],
+  users: [
+    { t: 'path', d: 'M16.5 21v-1.8a4.2 4.2 0 0 0-4.2-4.2H5.7a4.2 4.2 0 0 0-4.2 4.2V21' },
+    { t: 'circle', cx: 9, cy: 7, r: 4 },
+    { t: 'path', d: 'M22.5 21v-1.8a4.2 4.2 0 0 0-3.2-4.1' },
+    { t: 'path', d: 'M16 3.2a4 4 0 0 1 0 7.6' },
+  ],
+  book: [
+    { t: 'path', d: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20' },
+    { t: 'path', d: 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z' },
+  ],
+  briefcase: [
+    { t: 'rect', x: 2, y: 7, w: 20, h: 14, rx: 2 },
+    { t: 'path', d: 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16' },
+  ],
+  piggyBank: [
+    {
+      t: 'path',
+      d: 'M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z',
+    },
+    { t: 'path', d: 'M2 9v1a2 2 0 0 0 2 2h1' },
+    { t: 'path', d: 'M16 11h.01' },
+  ],
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconRegistry;
+
+/**
+ * Resolves an icon name that came from outside the bundle.
+ *
+ * Category icons are stored on the server, so a category created by a newer
+ * client — or a typo in a seed file — can name a glyph this build does not have.
+ * Falling back to a neutral dot keeps a picker row rendering; indexing the
+ * registry directly would hand `undefined` to `.map` and take the screen down.
+ */
+export function toIconName(value: string | null | undefined): IconName {
+  return value && value in iconRegistry ? (value as IconName) : 'circle';
+}

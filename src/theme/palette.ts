@@ -163,6 +163,25 @@ export const categoryHues = {
   income: '#2BD98C',
   transfer: '#8D86A8',
   other: '#6E6690',
+
+  /**
+   * The remaining groups in the default category tree.
+   *
+   * Two are new hues — lime for groceries, teal for travel — chosen to sit in the
+   * gaps this wheel already leaves. The rest are deliberate aliases: Home *is* the
+   * bills group, Financial *is* investments, and Personal leads with education, so
+   * giving each its own near-duplicate colour would make a chart harder to read
+   * rather than more informative.
+   *
+   * Alcohol takes the amber that Home no longer needs, which also happens to be
+   * the colour of the thing.
+   */
+  grocery: '#8ED04E',
+  travel: '#2DD4BF',
+  home: '#FF5F6D',
+  alcohol: '#FFB020',
+  financial: '#9B84FF',
+  personal: '#38BDF8',
 } as const;
 
 export type CategoryHue = keyof typeof categoryHues;

@@ -40,7 +40,8 @@
         {
           "userInterfaceStyle": "dark"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "reactCompiler": true

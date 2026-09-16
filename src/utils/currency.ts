@@ -95,3 +95,57 @@ export function rupeesToPaise(input: string): Paise {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100);
 }
+
+/** Paise back to the raw string the amount keypad edits, e.g. 124850 -> "1248.50". */
+export function paiseToRupeeInput(paise: Paise): string {
+  const absolute = Math.abs(paise);
+  const rupees = Math.floor(absolute / 100);
+  const remainder = absolute % 100;
+  return remainder === 0 ? String(rupees) : `${rupees}.${String(remainder).padStart(2, '0')}`;
+}
+
+/**
+ * Applies one keypad press to the raw amount string.
+ *
+ * The rules exist because a ledger cannot hold what a free-text field allows:
+ * paise stop at two decimals, there is only ever one point, and a leading zero
+ * never survives the next digit. Enforcing them here means the amount is always
+ * valid — there is no "that is not a number" error state to design, because the
+ * field cannot reach one.
+ */
+export function applyAmountKey(current: string, key: string): string {
+  if (key === 'back') return current.slice(0, -1);
+
+  if (key === '.') {
+    if (current.includes('.')) return current;
+    return current === '' ? '0.' : `${current}.`;
+  }
+
+  const [whole = '', fraction] = current.split('.');
+
+  // Two decimal places is the whole of the rupee. A third digit is a typo.
+  if (fraction !== undefined && fraction.length >= 2) return current;
+
+  // "0" then "5" means ₹5, not ₹05.
+  if (current === '0') return key;
+
+  // Ten crore is past any transaction a personal tracker needs and short of where
+  // a double stops holding integers exactly.
+  if (fraction === undefined && whole.replace(/\D/g, '').length >= 9) return current;
+
+  return current + key;
+}
+
+/**
+ * Renders the raw amount string for display, grouped Indian-style, while keeping
+ * a trailing "." or a half-typed ".5" visible as the user types it.
+ */
+export function formatAmountInput(raw: string): string {
+  if (raw === '') return '0';
+
+  const [whole = '', fraction] = raw.split('.');
+  const grouped = whole === '' ? '0' : groupIndian(Number(whole));
+
+  if (fraction === undefined) return grouped;
+  return `${grouped}.${fraction}`;
+}
