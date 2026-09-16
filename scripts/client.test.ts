@@ -82,6 +82,8 @@ async function signIn(accessToken = 'access-1', refreshToken = 'refresh-1'): Pro
       name: 'Test User',
       email: 'test@paisa.test',
       currency: 'INR',
+      timezone: 'Asia/Kolkata',
+      notificationPrefs: { budgetAlerts: true, recurringAlerts: true },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -165,7 +167,16 @@ async function main(): Promise<void> {
           accessToken: 'access-2',
           refreshToken: 'refresh-2',
           expiresIn: 900,
-          user: { id: 'u1', name: 'Test User', email: 'test@paisa.test', currency: 'INR', createdAt: '', updatedAt: '' },
+          user: {
+            id: 'u1',
+            name: 'Test User',
+            email: 'test@paisa.test',
+            currency: 'INR',
+            timezone: 'Asia/Kolkata',
+            notificationPrefs: { budgetAlerts: true, recurringAlerts: true },
+            createdAt: '',
+            updatedAt: '',
+          },
         });
       }
       return success({ accounts: ['ok'] });
@@ -195,7 +206,16 @@ async function main(): Promise<void> {
           accessToken: 'access-2',
           refreshToken: 'refresh-2',
           expiresIn: 900,
-          user: { id: 'u1', name: 'Test User', email: 'test@paisa.test', currency: 'INR', createdAt: '', updatedAt: '' },
+          user: {
+            id: 'u1',
+            name: 'Test User',
+            email: 'test@paisa.test',
+            currency: 'INR',
+            timezone: 'Asia/Kolkata',
+            notificationPrefs: { budgetAlerts: true, recurringAlerts: true },
+            createdAt: '',
+            updatedAt: '',
+          },
         });
       }
       return call.authorization === 'Bearer access-1'
@@ -251,7 +271,16 @@ async function main(): Promise<void> {
           accessToken: 'access-2',
           refreshToken: 'refresh-2',
           expiresIn: 900,
-          user: { id: 'u1', name: 'Test User', email: 'test@paisa.test', currency: 'INR', createdAt: '', updatedAt: '' },
+          user: {
+            id: 'u1',
+            name: 'Test User',
+            email: 'test@paisa.test',
+            currency: 'INR',
+            timezone: 'Asia/Kolkata',
+            notificationPrefs: { budgetAlerts: true, recurringAlerts: true },
+            createdAt: '',
+            updatedAt: '',
+          },
         });
       }
       return failure(401, 'TOKEN_EXPIRED');

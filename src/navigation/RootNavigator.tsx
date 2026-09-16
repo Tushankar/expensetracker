@@ -4,8 +4,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AccountFormScreen } from '@/screens/AccountFormScreen';
 import { AccountsScreen } from '@/screens/AccountsScreen';
 import { AuthScreen } from '@/screens/AuthScreen';
+import { BudgetsScreen } from '@/screens/BudgetsScreen';
 import { DesignSystemScreen } from '@/screens/DesignSystemScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { NotificationsScreen } from '@/screens/NotificationsScreen';
+import { RecurringFormScreen } from '@/screens/RecurringFormScreen';
+import { RecurringScreen } from '@/screens/RecurringScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { TransactionDetailScreen } from '@/screens/TransactionDetailScreen';
 import { TransactionsScreen } from '@/screens/TransactionsScreen';
@@ -19,6 +23,15 @@ import type { MainTabParamList, RootStackParamList } from './types';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+/**
+ * Four destinations, chosen by how often they are opened rather than by how much
+ * work went into them.
+ *
+ * Home, Activity and Budgets are the daily loop. Accounts, Recurring and Alerts
+ * are setup and review — reached from Home and from Settings, where someone goes
+ * once a week rather than five times a day. A fifth tab would make every one of
+ * them narrower to serve a screen nobody opens twice a day.
+ */
 function MainTabs() {
   const openAddSheet = useUiStore((state) => state.openAddSheet);
 
@@ -34,7 +47,7 @@ function MainTabs() {
         component={TransactionsScreen}
         options={{ title: 'Activity' }}
       />
-      <Tab.Screen name="Accounts" component={AccountsScreen} options={{ title: 'Accounts' }} />
+      <Tab.Screen name="Budgets" component={BudgetsScreen} options={{ title: 'Budgets' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Tab.Navigator>
   );
@@ -79,9 +92,29 @@ export function RootNavigator() {
             options={{ headerShown: true, title: 'Transaction' }}
           />
           <Stack.Screen
+            name="Accounts"
+            component={AccountsScreen}
+            options={{ headerShown: true, title: 'Accounts' }}
+          />
+          <Stack.Screen
             name="AccountForm"
             component={AccountFormScreen}
             options={{ headerShown: true, title: 'Account' }}
+          />
+          <Stack.Screen
+            name="Recurring"
+            component={RecurringScreen}
+            options={{ headerShown: true, title: 'Recurring' }}
+          />
+          <Stack.Screen
+            name="RecurringForm"
+            component={RecurringFormScreen}
+            options={{ headerShown: true, title: 'Recurring' }}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{ headerShown: true, title: 'Alerts' }}
           />
           <Stack.Screen
             name="DesignSystem"

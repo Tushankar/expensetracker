@@ -5,21 +5,34 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useAuthStore } from '@/store/authStore';
 
-import { accountApi, authApi, categoryApi, transactionApi, userApi } from './endpoints';
+import {
+  accountApi,
+  authApi,
+  budgetApi,
+  categoryApi,
+  notificationApi,
+  recurringApi,
+  transactionApi,
+  userApi,
+} from './endpoints';
 import { queryKeys } from './queryClient';
 import type {
   Account,
   AuthSession,
   Category,
   CreateAccountInput,
+  CreateBudgetInput,
+  CreateRecurringInput,
   CreateTransactionInput,
   Transaction,
   TransactionFilters,
   UpdateAccountInput,
+  UpdateBudgetInput,
+  UpdateRecurringInput,
   UpdateTransactionInput,
 } from './types';
 
@@ -114,7 +127,12 @@ export function useUpdateProfile() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (patch: { name?: string; currency?: string }) => userApi.update(patch),
+    mutationFn: (patch: {
+      name?: string;
+      currency?: string;
+      timezone?: string;
+      notificationPrefs?: { budgetAlerts?: boolean; recurringAlerts?: boolean };
+    }) => userApi.update(patch),
     async onSuccess({ user }) {
       await updateUser(user);
       await client.invalidateQueries({ queryKey: queryKeys.session });
@@ -303,4 +321,231 @@ export function useDeleteTransaction() {
       await invalidateLedger(client);
     },
   });
+}
+
+// --------------------------------------------------------------------- budgets
+
+/**
+ * Budgets are always a calendar month, even when the dashboard is showing a week
+ * or a custom range. A cap is a monthly promise; prorating it to "₹1,615 so far
+ * this week" would be arithmetic nobody asked for and nobody trusts.
+ */
+export function useBudgets(month?: string) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.budgets(month),
+    enabled: status === 'signedIn',
+    queryFn: () => budgetApi.summary(month),
+  });
+}
+
+export function useCreateBudget() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateBudgetInput) => budgetApi.create(input),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['budgets'] }),
+  });
+}
+
+export function useUpdateBudget() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; patch: UpdateBudgetInput }) =>
+      budgetApi.update(input.id, input.patch),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['budgets'] }),
+  });
+}
+
+export function useDeleteBudget() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => budgetApi.remove(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['budgets'] }),
+  });
+}
+
+// ------------------------------------------------------------------- recurring
+
+export function useRecurring(includeInactive = false) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.recurring(includeInactive),
+    enabled: status === 'signedIn',
+    queryFn: () => recurringApi.list(includeInactive),
+  });
+}
+
+export function useUpcomingRecurring(withinDays = 14, limit = 4) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.recurringUpcoming(withinDays, limit),
+    enabled: status === 'signedIn',
+    queryFn: () => recurringApi.upcoming(withinDays, limit),
+  });
+}
+
+/**
+ * A rule writes transactions, so every mutation has to invalidate the ledger too
+ * — creating one with a start date in the past records a charge immediately, and
+ * Home would otherwise show a balance that disagrees with the list under it.
+ */
+function invalidateRecurring(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ['recurring'] }),
+    client.invalidateQueries({ queryKey: ['budgets'] }),
+    invalidateLedger(client),
+  ]).then(() => undefined);
+}
+
+export function useCreateRecurring() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateRecurringInput) => recurringApi.create(input),
+    onSuccess: () => invalidateRecurring(client),
+  });
+}
+
+export function useUpdateRecurring() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; patch: UpdateRecurringInput }) =>
+      recurringApi.update(input.id, input.patch),
+    onSuccess: () => invalidateRecurring(client),
+  });
+}
+
+export function usePauseRecurring() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; paused: boolean }) =>
+      recurringApi.setPaused(input.id, input.paused),
+    onSuccess: () => invalidateRecurring(client),
+  });
+}
+
+export function useDeleteRecurring() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => recurringApi.remove(id),
+    onSuccess: () => invalidateRecurring(client),
+  });
+}
+
+// --------------------------------------------------------------- notifications
+
+export function useNotifications() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.notifications,
+    enabled: status === 'signedIn',
+    queryFn: () => notificationApi.list(),
+  });
+}
+
+/**
+ * The badge on the bell.
+ *
+ * Polled rather than pushed, because push is not wired up yet. A minute is often
+ * enough to notice a budget alert without being a background request every few
+ * seconds, and it is a count rather than the list.
+ */
+export function useUnreadCount() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.unreadCount,
+    enabled: status === 'signedIn',
+    queryFn: () => notificationApi.unreadCount(),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
+
+function invalidateNotifications(client: QueryClient): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.notifications }),
+    client.invalidateQueries({ queryKey: queryKeys.unreadCount }),
+  ]);
+}
+
+export function useMarkNotificationRead() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => notificationApi.markRead(id),
+    onSuccess: () => invalidateNotifications(client),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => notificationApi.markAllRead(),
+    onSuccess: () => invalidateNotifications(client),
+  });
+}
+
+export function useClearNotifications() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => notificationApi.clearAll(),
+    onSuccess: () => invalidateNotifications(client),
+  });
+}
+
+// -------------------------------------------------------------- daily spending
+
+export function useDailySpend(range: { from: string; to: string }) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.daily(range),
+    enabled: status === 'signedIn',
+    queryFn: () => transactionApi.daily(range),
+  });
+}
+
+// -------------------------------------------------------------- timezone sync
+
+/**
+ * Keeps the account's stored zone in step with the device.
+ *
+ * The server computes budget months, recurring dates and daily buckets in the
+ * zone on the user's record, while the app computes its own period boundaries
+ * from the device. If those two disagree, an 11pm expense on the 31st lands in
+ * one month on the dashboard and a different one in the budget — with nothing on
+ * screen to explain the discrepancy.
+ *
+ * Runs once per launch, only when they actually differ, and failure is silent:
+ * a zone that could not be saved is not worth an error banner over.
+ */
+export function useTimezoneSync(): void {
+  const status = useAuthStore((state) => state.status);
+  const storedZone = useAuthStore((state) => state.user?.timezone);
+  const updateUser = useAuthStore((state) => state.updateUser);
+  const attempted = useRef(false);
+
+  useEffect(() => {
+    if (status !== 'signedIn' || !storedZone || attempted.current) return;
+
+    let deviceZone: string | undefined;
+    try {
+      deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      // Some Hermes builds ship without a zone database. Leaving the stored one
+      // alone is the right answer — it is at worst stale, not wrong.
+      return;
+    }
+
+    if (!deviceZone || deviceZone === storedZone) return;
+
+    attempted.current = true;
+    userApi
+      .update({ timezone: deviceZone })
+      .then(({ user }) => updateUser(user))
+      .catch(() => undefined);
+  }, [status, storedZone, updateUser]);
 }

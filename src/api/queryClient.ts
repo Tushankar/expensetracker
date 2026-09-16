@@ -16,6 +16,14 @@ export const queryKeys = {
   transactionList: (filters: Record<string, unknown>) => ['transactions', 'list', filters] as const,
   transaction: (id: string) => ['transactions', 'detail', id] as const,
   summary: (range: Record<string, unknown>) => ['transactions', 'summary', range] as const,
+  daily: (range: Record<string, unknown>) => ['transactions', 'daily', range] as const,
+
+  budgets: (month?: string) => ['budgets', month ?? 'current'] as const,
+  recurring: (includeInactive: boolean) => ['recurring', 'list', includeInactive] as const,
+  recurringUpcoming: (withinDays: number, limit: number) =>
+    ['recurring', 'upcoming', withinDays, limit] as const,
+  notifications: ['notifications'] as const,
+  unreadCount: ['notifications', 'unread-count'] as const,
 };
 
 /**

@@ -35,6 +35,18 @@ const schema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
+  /**
+   * How often the recurring scheduler looks for work. Sixty seconds is far more
+   * often than a monthly rule needs — the point is that a rule due at 9am fires
+   * within a minute of 9am rather than whenever someone next opens the app.
+   */
+  RECURRING_INTERVAL_MS: z.coerce.number().int().min(5_000).default(60_000),
+  /** Set false to run the API without the scheduler, e.g. a second instance. */
+  RECURRING_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

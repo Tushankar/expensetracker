@@ -6,6 +6,7 @@ import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import {
   useAccountMap,
   useCategoryMap,
+  useDailySpend,
   useSummary,
   useTransactionList,
   type PaymentMethod,
@@ -14,8 +15,7 @@ import {
 } from '@/api';
 import { ActivitySummaryCard } from '@/components/activity/ActivitySummaryCard';
 import { QueryState } from '@/components/data/QueryState';
-import { PERIODS } from '@/components/home';
-import { TransactionGroups } from '@/components/transactions';
+import { TransactionCalendar, TransactionGroups } from '@/components/transactions';
 import {
   Badge,
   Button,
@@ -29,11 +29,12 @@ import {
   Text,
   type Chip,
 } from '@/components/ui';
+import { DateRangeSheet } from '@/screens/sheets/DateRangeSheet';
 import { FiltersSheet, type Filters } from '@/screens/sheets/FiltersSheet';
 import { useUiStore } from '@/store/uiStore';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
-import { periodRange, type Period } from '@/utils/period';
+import { dayKeyOf, periodRange, type PeriodSelection } from '@/utils/period';
 
 type Kind = 'all' | TransactionType;
 
@@ -70,7 +71,18 @@ export function TransactionsScreen() {
   const openAddSheet = useUiStore((state) => state.openAddSheet);
 
   const [kind, setKind] = useState<Kind>('all');
-  const [period, setPeriod] = useState<Period>('month');
+  const [selection, setSelection] = useState<PeriodSelection>({ period: 'month' });
+  /**
+   * List or calendar.
+   *
+   * The same transactions either way — the calendar is a second way in, for the
+   * question a list answers badly: "what did I actually spend on the 14th?"
+   */
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [day, setDay] = useState(() => new Date());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rangeSession, setRangeSession] = useState(0);
   const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -90,7 +102,28 @@ export function TransactionsScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const range = useMemo(() => periodRange(period), [period]);
+  const range = useMemo(() => periodRange(selection), [selection]);
+
+  /** The visible calendar month, which is its own window regardless of the period. */
+  const calendarRange = useMemo(() => {
+    const from = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1, 0, 0, 0, 0);
+    const to = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [calendarMonth]);
+
+  const dayRange = useMemo(() => {
+    const from = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
+    const to = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [day]);
 
   const query = useMemo(
     () => ({
@@ -103,13 +136,19 @@ export function TransactionsScreen() {
       ...(filters.maxAmount !== undefined ? { maxAmount: filters.maxAmount } : {}),
       // A search is a search of everything — scoping it to the selected month is
       // how people conclude the app "lost" a transaction they know they entered.
-      ...(debounced ? {} : { from: range.from, to: range.to }),
+      // In calendar mode the window is the selected day instead.
+      ...(debounced
+        ? {}
+        : view === 'calendar'
+          ? dayRange
+          : { from: range.from, to: range.to }),
       sort: filters.sort ?? ('-date' as const),
     }),
-    [kind, debounced, filters, range],
+    [kind, debounced, filters, range, view, dayRange],
   );
 
   const list = useTransactionList(query);
+  const dailyQuery = useDailySpend(calendarRange);
   const summaryQuery = useSummary({ from: range.from, to: range.to });
   const previousQuery = useSummary({ from: range.previousFrom, to: range.previousTo });
   const categories = useCategoryMap();
@@ -144,7 +183,16 @@ export function TransactionsScreen() {
     void list.refetch();
     void summaryQuery.refetch();
     void previousQuery.refetch();
-  }, [list, summaryQuery, previousQuery]);
+    void dailyQuery.refetch();
+  }, [list, summaryQuery, previousQuery, dailyQuery]);
+
+  function openRangeSheet() {
+    setRangeSession((current) => current + 1);
+    setRangeOpen(true);
+  }
+
+  const selectedDayKey = dayKeyOf(day);
+  const selectedDay = (dailyQuery.data ?? []).find((entry) => entry.date === selectedDayKey);
 
   function openTransaction(transaction: Transaction) {
     navigation.navigate('TransactionDetail', { id: transaction.id });
@@ -156,6 +204,7 @@ export function TransactionsScreen() {
     setDebounced('');
     setFilters(EMPTY_FILTERS);
     setSearching(false);
+    setSelection({ period: 'month' });
   }
 
   return (
@@ -182,6 +231,24 @@ export function TransactionsScreen() {
           }
           action={
             <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+              <IconButton
+                name={view === 'calendar' ? 'list' : 'calendar'}
+                accessibilityLabel={
+                  view === 'calendar' ? 'Show the list' : 'Show the calendar'
+                }
+                accessibilityHint={
+                  view === 'calendar'
+                    ? 'Goes back to every transaction in the period'
+                    : 'Browses transactions a day at a time'
+                }
+                variant="surface"
+                onPress={() => {
+                  setView((current) => (current === 'list' ? 'calendar' : 'list'));
+                  setSearching(false);
+                  setSearch('');
+                  setDebounced('');
+                }}
+              />
               <IconButton
                 name={searching ? 'close' : 'search'}
                 accessibilityLabel={searching ? 'Close search' : 'Search transactions'}
@@ -247,6 +314,9 @@ export function TransactionsScreen() {
             alignItems: 'center',
             gap: theme.spacing.sm,
             marginBottom: theme.spacing.lg,
+            // In calendar mode the day picker *is* the period control, so the
+            // month pill beside it would be two answers to one question.
+            display: view === 'calendar' ? 'none' : 'flex',
           }}
         >
           <ChipRow
@@ -263,17 +333,22 @@ export function TransactionsScreen() {
             rightIcon="chevronDown"
             accessibilityLabel={`Period, ${range.label}`}
             accessibilityHint="Changes the period shown"
-            onPress={() => {
-              // Cycles rather than opening a picker: five options, and the chip
-              // itself is the affordance.
-              const index = PERIODS.findIndex((option) => option.value === period);
-              const next = PERIODS[(index + 1) % PERIODS.length];
-              if (next) setPeriod(next.value);
-            }}
+            onPress={openRangeSheet}
           />
         </View>
 
-        {debounced ? (
+        {view === 'calendar' ? (
+          <View style={{ marginBottom: theme.spacing.xxl }}>
+            <TransactionCalendar
+              days={dailyQuery.data ?? []}
+              selected={day}
+              onSelect={setDay}
+              onMonthChange={setCalendarMonth}
+              selectedCount={selectedDay?.count ?? 0}
+              selectedSpend={selectedDay?.expense ?? 0}
+            />
+          </View>
+        ) : debounced ? (
           <View style={{ marginBottom: theme.spacing.lg }}>
             <Badge label={`Searching all time for "${debounced}"`} tone="brand" />
           </View>
@@ -303,13 +378,20 @@ export function TransactionsScreen() {
                   description: 'No transactions fit these filters. Try widening them.',
                   action: { label: 'Clear all', onPress: clearEverything, variant: 'secondary' },
                 }
-              : {
-                  icon: 'list',
-                  title: 'No transactions yet',
-                  description:
-                    'Record your first expense and it will show up here, grouped by day.',
-                  action: { label: 'Add expense', onPress: () => openAddSheet('expense') },
-                }
+              : view === 'calendar'
+                ? {
+                    icon: 'calendar',
+                    title: 'Nothing on this day',
+                    description: 'Pick another date, or add something for this one.',
+                    action: { label: 'Add expense', onPress: () => openAddSheet('expense') },
+                  }
+                : {
+                    icon: 'list',
+                    title: 'No transactions yet',
+                    description:
+                      'Record your first expense and it will show up here, grouped by day.',
+                    action: { label: 'Add expense', onPress: () => openAddSheet('expense') },
+                  }
           }
         >
           <TransactionGroups
@@ -348,6 +430,17 @@ export function TransactionsScreen() {
         onApply={(next) => {
           setFilters(next);
           setFiltersOpen(false);
+        }}
+      />
+
+      <DateRangeSheet
+        key={`range-${rangeSession}`}
+        visible={rangeOpen}
+        value={selection}
+        onClose={() => setRangeOpen(false)}
+        onApply={(next) => {
+          setSelection(next);
+          setRangeOpen(false);
         }}
       />
     </>

@@ -4,7 +4,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type MainTabParamList = {
   Home: undefined;
   Transactions: undefined;
-  Accounts: undefined;
+  Budgets: undefined;
   Settings: undefined;
 };
 
@@ -15,6 +15,11 @@ export type RootStackParamList = {
   TransactionDetail: { id: string };
   /** No id means "create". */
   AccountForm: { id?: string } | undefined;
+  Accounts: undefined;
+  Recurring: undefined;
+  /** No id means "create". */
+  RecurringForm: { id?: string } | undefined;
+  Notifications: undefined;
   DesignSystem: undefined;
 };
 

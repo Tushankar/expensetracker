@@ -16,7 +16,7 @@ import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { createQueryClient } from '@/api';
+import { createQueryClient, useTimezoneSync } from '@/api';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { toNavigationTheme } from '@/navigation/navigationTheme';
 import { AddTransactionSheet } from '@/screens/sheets/AddTransactionSheet';
@@ -78,6 +78,10 @@ export default function App() {
 function AppShell() {
   const theme = useTheme();
   const signedIn = useAuthStore((state) => state.status === 'signedIn');
+
+  // The server does its own date arithmetic in the account's stored zone, so the
+  // two have to agree about which day it is. See the hook.
+  useTimezoneSync();
 
   useEffect(() => {
     // Paints the window behind the React tree, which is what shows during rotation

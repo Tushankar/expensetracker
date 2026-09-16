@@ -3,11 +3,14 @@
 An India-first personal expense tracker: a React Native app and the Node API behind it.
 
 **Step 1** built the design system and the navigation shell on static data.
-**Step 2 — this** — replaced all of it with a real backend: accounts, categories,
+**Step 2** replaced all of it with a real backend: accounts, categories,
 transactions and transfers, JWT auth with refresh, and a mobile data layer that
 handles loading, errors, empty states and lost connections.
+**Step 3 — this** — turned it into a daily dashboard: budgets, recurring
+transactions, a notification system, a calendar view, and week / month / custom
+date periods throughout.
 
-Budgets, analytics, AI and receipt scanning are deliberately not here yet.
+AI and receipt scanning are deliberately not here yet.
 
 ## Running it
 
@@ -40,20 +43,25 @@ for a tunnel or a deployed server, and restart the bundler afterwards (Metro inl
 | --- | --- |
 | `npm run typecheck` | App and scripts. |
 | `npm run lint` | |
-| `npm run verify` | 29 unit checks + 15 API-client behaviour tests. No server needed. |
-| `npm run verify:e2e` | 29 checks of the mobile data layer against a running API. |
-| `npm run server:test` | 58 integration tests of the API against the real database. |
+| `npm run verify` | 40 unit checks + 15 API-client behaviour tests. No server needed. |
+| `npm run verify:e2e` | 45 checks of the mobile data layer against a running API. |
+| `npm run server:test` | 115 integration tests of the API against the real database. |
 
-All five pass. The last two need `npm run server` in another terminal.
+All five pass — 215 checks. The last two need `npm run server` in another
+terminal.
 
 What the suites are for, in order: `verify` covers the pure logic that is easy to get
 quietly wrong and impossible to eyeball in a simulator — Indian digit grouping, what
-each keypad press does to the amount, where a period's boundaries fall — plus the
-client's token handling against a fake server. `verify:e2e` calls the same
-`transactionApi.create` the screens call, against the real API, so a field renamed on
-one side and not the other fails there rather than on a device. `server:test` covers
-the API on its own, including that one user cannot read or spend from another's
-account.
+each keypad press does to the amount, where a week or a custom range's boundaries
+fall — plus the client's token handling against a fake server. `verify:e2e` calls the
+same `transactionApi.create` and `budgetApi.summary` the screens call, against the
+real API, so a field renamed on one side and not the other fails there rather than on
+a device. `server:test` covers the API on its own, including that one user cannot read
+or spend from another's account. `test:step` covers the parts most likely to be
+subtly wrong: that "monthly on the 31st" survives February, that a rule resumed after
+three months does not write three backdated charges, that an 11pm expense on the last
+of the month counts against *that* month's budget, and that crossing a cap alerts you
+exactly once.
 
 What none of them cover: React rendering. Layout, gestures and animation still need a
 device.
@@ -65,6 +73,7 @@ device.
 | Runtime | Expo SDK 57 · RN 0.86 · React 19.2 | Node 20+ · Express 5 |
 | Language | TypeScript, `strict` + `noUncheckedIndexedAccess` | same |
 | Data | TanStack Query 5 | MongoDB · Mongoose 8 |
+| Dates | Device-local arithmetic | Luxon, in the user's stored zone |
 | State | Zustand | — |
 | Auth | expo-secure-store | JWT access + rotating refresh, bcrypt |
 | Validation | — | Zod at every edge |
@@ -72,6 +81,7 @@ device.
 | Styling | Token-driven `StyleSheet`, dark-only, three accents | — |
 | Charts | Hand-built on `react-native-svg` | — |
 | Icons | Hand-authored SVG paths, ~95 glyphs | — |
+| Scheduler | — | In-process interval, idempotent by occurrence count |
 
 ## Layout
 
@@ -84,7 +94,9 @@ src/
     charts/     Donut, ring, bars, sparkline
     icons/      Icon path registry (data only)
     home/       Home composites
-    transactions/ Row + day-grouped list
+    dashboard/  Period selector, budget snapshot, upcoming strip
+    budgets/    Budget progress row
+    transactions/ Row, day-grouped list, calendar view
     activity/   Activity composites
     data/       QueryState — the shared loading / error / empty boundary
   navigation/   Stack + tabs, custom TabBar
@@ -94,6 +106,66 @@ src/
 scripts/        Checks that run under Node, and stubs for the native modules
 server/         The API. Has its own README.
 ```
+
+## The dashboard
+
+Reading order is the whole design: who you are, what you have, what you kept, what
+you promised yourself, where it went, what is coming, what just happened. Each
+block answers exactly one question, in the order someone opening a finance app
+actually asks them — and anything that would answer a second question belongs on
+the screen that owns it. That is why Home shows three budgets and not twelve, five
+transactions and not fifty.
+
+**Periods**: This Week, This Month, Last Month and a custom range, with 3/6/12
+month presets inside the range sheet. Every figure re-queries; nothing is
+re-filtered client-side, because a "last month" view assembled from whichever
+transactions happened to be loaded would be a picture of the scroll position.
+
+**Budgets stay monthly even when the dashboard is showing a week.** A cap is a
+monthly promise, and prorating it to "₹1,615 so far this week" is arithmetic
+nobody asked for and nobody trusts. The month is named on the card rather than
+implied.
+
+## Budgets
+
+An optional overall cap plus one per category, each showing the amount used, the
+amount remaining, the percentage, and a state: on track, getting close, over.
+
+The bar is coloured by **state, not by category** — tinting Food's bar with Food's
+green would make "110% of your food budget" look reassuring. It also never
+overflows its track: going over is said in words and in colour, not by a fill that
+runs off the end of the card. `remaining` is floored at zero and `overBy` carries
+the rest, so no screen has to decide what a negative "remaining" means.
+
+## Recurring
+
+Weekly, monthly, yearly, or any custom unit-and-interval. Each rule can record its
+transaction automatically or just remind you — a fixed EMI is automatic, a
+variable electricity bill is a reminder.
+
+Pause keeps a rule's place in the schedule but not its clock: resuming skips to
+the next occurrence rather than writing the ones it missed. Creating a rule with a
+past start date does the opposite — it catches up exactly one occurrence, so
+"Netflix, from the 5th" added on the 16th records this month and not the eight
+before it. The form says which will happen before you save it.
+
+## Notifications
+
+Four kinds — budget close, budget over, charge coming up, charge recorded — with
+an in-app list, an unread badge, and per-kind switches in Settings.
+
+The anti-spam mechanism is a unique index, not a convention: every alert carries a
+key naming the exact thing and period it is about, so the hundredth expense of
+September cannot re-announce what the first one already said. Push is a seam —
+tokens are stored, triggers and de-duplication all run, and turning it on is one
+call inside `deliver()` on the server.
+
+## Calendar
+
+A toggle on Activity, because it is a second way into the same transactions rather
+than a separate feature. Days are tinted by what they cost, scaled against the
+busiest day of the visible month so a ₹2,000 month and a ₹90,000 month both read.
+Selecting a day shows its count, its total and its transactions.
 
 ## How the pieces fit
 

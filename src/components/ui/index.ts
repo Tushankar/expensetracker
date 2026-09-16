@@ -1,7 +1,7 @@
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
-export { Calendar, type CalendarProps } from './Calendar';
+export { Calendar, type CalendarProps, type DayMarker } from './Calendar';
 export { Card, type CardProps, type CardVariant } from './Card';
 export { CategoryChip, type CategoryChipProps } from './CategoryChip';
 export { ChipRow, type Chip, type ChipRowProps } from './ChipRow';

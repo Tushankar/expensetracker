@@ -3,10 +3,15 @@ import { Types } from 'mongoose';
 import { connectDatabase, disconnectDatabase } from '../config/db';
 import { logger } from '../config/logger';
 import { hashPassword } from '../lib/password';
+import { zoneOrDefault } from '../lib/time';
 import { AccountModel } from '../modules/accounts/account.model';
+import { BudgetModel } from '../modules/budgets/budget.model';
 import { CategoryModel } from '../modules/categories/category.model';
+import { NotificationModel } from '../modules/notifications/notification.model';
+import { RecurringModel } from '../modules/recurring/recurring.model';
 import { TransactionModel } from '../modules/transactions/transaction.model';
 import { UserModel } from '../modules/users/user.model';
+import { initialSchedule } from '../modules/recurring/recurring.service';
 import { seedUserDefaults } from '../seed/seedUser';
 
 /**
@@ -49,7 +54,12 @@ async function main(): Promise<void> {
     logger.info({ email: EMAIL }, 'created demo user');
   } else {
     logger.info({ email: EMAIL }, 'demo user already exists, resetting their data');
-    await TransactionModel.deleteMany({ userId: user._id });
+    await Promise.all([
+      TransactionModel.deleteMany({ userId: user._id }),
+      BudgetModel.deleteMany({ userId: user._id }),
+      RecurringModel.deleteMany({ userId: user._id }),
+      NotificationModel.deleteMany({ userId: user._id }),
+    ]);
     if (!user.seededAt) await seedUserDefaults(user._id, user.currency);
   }
 
@@ -186,12 +196,75 @@ async function main(): Promise<void> {
     await AccountModel.updateOne({ _id: accountId }, { $set: { balance } });
   }
 
+  // -------------------------------------------------------------- budgets
+  //
+  // Deliberately a mix: one comfortably on track, one close enough to warn, and
+  // one already over. A demo where every bar is green shows none of the states
+  // the screen exists to communicate.
+  await BudgetModel.deleteMany({ userId });
+  await BudgetModel.insertMany([
+    { userId, scope: 'overall', categoryId: null, amount: r(60000), warnAtPercent: 80 },
+    { userId, scope: 'category', categoryId: category('Restaurants'), amount: r(7000), warnAtPercent: 80 },
+    { userId, scope: 'category', categoryId: category('Petrol'), amount: r(5000), warnAtPercent: 80 },
+    { userId, scope: 'category', categoryId: category('Amazon'), amount: r(5000), warnAtPercent: 80 },
+    { userId, scope: 'category', categoryId: category('Rent'), amount: r(20000), warnAtPercent: 90 },
+  ]);
+
+  // ------------------------------------------------------------ recurring
+  const zone = zoneOrDefault(user.timezone);
+
+  const rules = [
+    { name: 'Rent', amount: r(18500), categoryName: 'Rent', accountId: hdfc._id, unit: 'month' as const, day: 5, method: 'net_banking' as const },
+    { name: 'Netflix', amount: r(649), categoryName: 'Netflix', accountId: card._id, unit: 'month' as const, day: 11, method: 'credit_card' as const },
+    { name: 'Cult.fit', amount: r(2500), categoryName: 'Gym', accountId: card._id, unit: 'month' as const, day: 9, method: 'credit_card' as const },
+    { name: 'JioFiber', amount: r(999), categoryName: 'Internet', accountId: hdfc._id, unit: 'month' as const, day: 10, method: 'upi' as const },
+    { name: 'Nifty 50 SIP', amount: r(10000), categoryName: 'Mutual Fund', accountId: hdfc._id, unit: 'month' as const, day: 3, method: 'net_banking' as const },
+  ];
+
+  const now = new Date();
+
+  await RecurringModel.insertMany(
+    rules.map((rule) => {
+      // Anchored on a day of this month that has not happened yet, so the demo
+      // opens on a list of things genuinely coming up rather than a list of
+      // charges the scheduler is about to write the moment it starts.
+      const anchor = new Date(now.getFullYear(), now.getMonth(), rule.day, 9, 0, 0, 0);
+      if (anchor.getTime() <= now.getTime()) anchor.setMonth(anchor.getMonth() + 1);
+
+      const schedule = initialSchedule(anchor, rule.unit, 1, zone, now);
+
+      return {
+        userId,
+        name: rule.name,
+        type: 'expense' as const,
+        amount: rule.amount,
+        categoryId: category(rule.categoryName),
+        accountId: rule.accountId,
+        destinationAccountId: null,
+        description: '',
+        paymentMethod: rule.method,
+        unit: rule.unit,
+        interval: 1,
+        startDate: anchor,
+        endDate: null,
+        maxOccurrences: null,
+        autoCreate: true,
+        occurrencesCreated: schedule.occurrencesCreated,
+        nextRunAt: schedule.nextRunAt,
+        isPaused: rule.name === 'Cult.fit',
+        isActive: true,
+      };
+    }),
+  );
+
   logger.info(
     {
       email: EMAIL,
       password: PASSWORD,
       transactions: documents.length,
       categories: categories.length,
+      budgets: 5,
+      recurring: rules.length,
     },
     'seed complete',
   );

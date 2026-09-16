@@ -2,7 +2,6 @@ import { Types } from 'mongoose';
 
 import { logger } from '../../config/logger';
 import { formatDay, occurrenceAt, zoneOrDefault, type RecurrenceUnit } from '../../lib/time';
-import { evaluateBudgets } from '../budgets/budget.service';
 import { raise } from '../notifications/notification.service';
 import { createTransaction } from '../transactions/transaction.service';
 import { UserModel } from '../users/user.model';
@@ -67,6 +66,8 @@ export async function runDueRecurring(now: Date = new Date()): Promise<Scheduler
         const occurrenceAtDate = rule.nextRunAt;
 
         if (rule.autoCreate) {
+          // `createTransaction` runs the budget check itself, so a standing
+          // charge that tips a cap over raises the same alert a manual entry does.
           const transaction = await createTransaction(String(rule.userId), buildInput(rule));
           result.created += 1;
 
@@ -78,10 +79,6 @@ export async function runDueRecurring(now: Date = new Date()): Promise<Scheduler
             dedupeKey: `rule:${String(rule._id)}:${occurrenceAtDate.toISOString()}:created`,
             data: { recurringId: String(rule._id), transactionId: transaction.id },
           });
-
-          // A standing charge can be the one that tips a budget over, so the same
-          // check a manual entry triggers runs here too.
-          void evaluateBudgets(String(rule.userId), occurrenceAtDate);
         }
 
         rule.occurrencesCreated += 1;

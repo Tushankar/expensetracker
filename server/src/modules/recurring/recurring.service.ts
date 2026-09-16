@@ -170,12 +170,25 @@ async function resolveReferences(
 }
 
 /**
- * Where the rule is in its schedule right now.
+ * Where a rule sits in its schedule right now.
  *
- * A rule created with a start date in the past should not fire once for every
- * occurrence it missed — someone adding "rent, from January" in September wants
- * a rule, not nine backdated charges. So the count is fast-forwarded past
- * everything already elapsed and the first run is the next one due.
+ * Two policies, because creating and resuming are different intentions:
+ *
+ * `catchUp` — used when a rule is created or its schedule is edited. The first
+ * run is the **most recent** occurrence, even if that is in the past, so adding
+ * "Netflix, monthly, from the 5th" on the 16th records this month's charge. Only
+ * one: the eight occurrences between January and September are skipped entirely,
+ * because someone adding a rule wants a rule, not nine backdated debits that
+ * rewrite closed months and wreck the balance.
+ *
+ * `skipToFuture` — used when a paused rule resumes. The first run is the next
+ * occurrence ahead of now. A gym membership paused for three months must not
+ * charge on the way back in; the user paused deliberately and is resuming
+ * deliberately, and a surprise debit is the opposite of what they asked for.
+ *
+ * `occurrencesCreated` counts positions on the schedule that are behind us,
+ * written or skipped, so `maxOccurrences` always means "this many occurrences
+ * from the anchor" rather than "this many that happened to be written".
  */
 export function initialSchedule(
   startDate: Date,
@@ -183,15 +196,19 @@ export function initialSchedule(
   interval: number,
   zone: string,
   now: Date = new Date(),
+  policy: 'catchUp' | 'skipToFuture' = 'catchUp',
 ): { occurrencesCreated: number; nextRunAt: Date } {
-  if (startDate.getTime() > now.getTime()) {
+  if (startDate.getTime() >= now.getTime()) {
     return { occurrencesCreated: 0, nextRunAt: startDate };
   }
 
   const elapsed = occurrencesElapsed(startDate, unit, interval, now, zone);
-  // `elapsed` counts whole intervals behind us; the next one is the one after.
-  const index = elapsed + 1;
-  return { occurrencesCreated: index, nextRunAt: occurrenceAt(startDate, unit, interval, index, zone) };
+  const index = policy === 'catchUp' ? elapsed : elapsed + 1;
+
+  return {
+    occurrencesCreated: index,
+    nextRunAt: occurrenceAt(startDate, unit, interval, index, zone),
+  };
 }
 
 /** True once the rule has run out of road: past its end date or its cap. */
@@ -256,6 +273,13 @@ export async function createRecurring(
     ]);
   }
 
+  const draft = {
+    endDate: input.endDate ?? null,
+    maxOccurrences: input.maxOccurrences ?? null,
+    occurrencesCreated,
+    nextRunAt,
+  };
+
   const rule = await RecurringModel.create({
     userId: new Types.ObjectId(userId),
     name: input.name,
@@ -269,11 +293,12 @@ export async function createRecurring(
     unit: input.unit,
     interval: input.interval,
     startDate: input.startDate,
-    endDate: input.endDate ?? null,
-    maxOccurrences: input.maxOccurrences ?? null,
     autoCreate: input.autoCreate,
-    occurrencesCreated,
-    nextRunAt,
+    ...draft,
+    // A rule whose whole run is already behind it — "two instalments, from last
+    // year" — is recorded as finished rather than created live and retired a
+    // second later by the scheduler.
+    isActive: !hasFinished(draft),
   });
 
   return toPublicRecurring(rule);
@@ -363,6 +388,8 @@ export async function setPaused(
       rule.unit as RecurrenceUnit,
       rule.interval,
       zone,
+      new Date(),
+      'skipToFuture',
     );
     rule.occurrencesCreated = schedule.occurrencesCreated;
     rule.nextRunAt = schedule.nextRunAt;

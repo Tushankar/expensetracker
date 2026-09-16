@@ -214,7 +214,31 @@ export async function createTransaction(
     await applyEffects(balanceEffects(transaction), session);
 
     return toPublicTransaction(transaction);
+  }).then((created) => {
+    afterLedgerChange(userId, input.date);
+    return created;
   });
+}
+
+/**
+ * Runs the budget check for the month a write landed in.
+ *
+ * Deliberately not awaited and deliberately outside the database transaction: an
+ * alert that fails must not roll back the expense that triggered it, and nobody
+ * should wait on an aggregation to see their own transaction saved. `raise`
+ * swallows its own errors, so the floating promise cannot reject.
+ */
+function afterLedgerChange(userId: string, ...dates: (Date | undefined)[]): void {
+  const months = new Set<number>();
+  for (const date of dates) {
+    if (!date) continue;
+    // One evaluation per distinct month, so moving a transaction across a
+    // boundary re-checks both ends without checking either twice.
+    const key = date.getUTCFullYear() * 12 + date.getUTCMonth();
+    if (months.has(key)) continue;
+    months.add(key);
+    void evaluateBudgets(userId, date);
+  }
 }
 
 export async function getTransaction(
@@ -260,6 +284,7 @@ export async function updateTransaction(
     // anything is changed. The new effect is applied from the updated document, so
     // the two never have to be reconciled field by field.
     const before = invert(balanceEffects(transaction));
+    const previousDate = transaction.date;
 
     const refs = await resolveReferences(
       userId,
@@ -291,6 +316,10 @@ export async function updateTransaction(
 
     await applyEffects([...before, ...balanceEffects(transaction)], session);
 
+    // Both ends: an edit that moved the date out of September and into October
+    // can take September back under its cap and push October over it.
+    afterLedgerChange(userId, previousDate, transaction.date);
+
     return toPublicTransaction(transaction);
   });
 }
@@ -304,8 +333,13 @@ export async function deleteTransaction(userId: string, transactionId: string): 
 
     if (!transaction) throw ApiError.notFound('Transaction not found', { transactionId });
 
+    const when = transaction.date;
     await applyEffects(invert(balanceEffects(transaction)), session);
     await transaction.deleteOne({ session });
+
+    // Deleting can take a budget back under its cap; the alert for that month is
+    // already recorded and stays, but the next write should re-evaluate honestly.
+    afterLedgerChange(userId, when);
   });
 }
 

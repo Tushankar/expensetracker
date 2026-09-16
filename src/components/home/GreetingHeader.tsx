@@ -11,8 +11,8 @@ export type GreetingHeaderProps = {
   onProfilePress: () => void;
   onNotificationsPress: () => void;
   onSearchPress: () => void;
-  /** Shows the unread dot on the bell. */
-  hasUnread?: boolean;
+  /** Drives the badge on the bell. Zero hides it. */
+  unreadCount?: number;
 };
 
 /** Greeting, name and the two persistent entry points. */
@@ -22,7 +22,7 @@ export function GreetingHeader({
   onProfilePress,
   onNotificationsPress,
   onSearchPress,
-  hasUnread = false,
+  unreadCount = 0,
 }: GreetingHeaderProps) {
   const theme = useTheme();
 
@@ -77,25 +77,42 @@ export function GreetingHeader({
         <IconButton
           name="bell"
           onPress={onNotificationsPress}
-          accessibilityLabel={hasUnread ? 'Notifications, unread' : 'Notifications'}
+          accessibilityLabel={
+            unreadCount > 0 ? `Alerts, ${unreadCount} unread` : 'Alerts'
+          }
           variant="surface"
           size="md"
         />
-        {hasUnread ? (
+        {unreadCount > 0 ? (
+          // A count rather than a dot: "3 budgets need looking at" and "one
+          // subscription renews tomorrow" deserve different urgency, and the
+          // number is the cheapest way to say which this is.
           <View
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: 8,
-              right: 9,
-              width: 9,
-              height: 9,
-              borderRadius: 5,
+              top: 2,
+              right: 0,
+              minWidth: 18,
+              height: 18,
+              paddingHorizontal: 5,
+              borderRadius: 9,
+              alignItems: 'center',
+              justifyContent: 'center',
               backgroundColor: theme.colors.negative,
               borderWidth: 2,
-              borderColor: theme.colors.surface,
+              borderColor: theme.colors.background,
             }}
-          />
+          >
+            <Text
+              variant="caption"
+              color="#FFFFFF"
+              maxFontSizeMultiplier={1.1}
+              style={{ fontSize: 10, lineHeight: 12 }}
+            >
+              {unreadCount > 9 ? '9+' : String(unreadCount)}
+            </Text>
+          </View>
         ) : null}
       </View>
     </View>

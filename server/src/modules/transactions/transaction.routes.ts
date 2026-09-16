@@ -7,10 +7,12 @@ import { validate, validatedQuery } from '../../middleware/validate';
 import {
   createTransactionSchema,
   listTransactionsSchema,
+  dailySchema,
   summarySchema,
   transactionIdParam,
   updateTransactionSchema,
   type CreateTransactionInput,
+  type DailyQuery,
   type ListTransactionsQuery,
   type SummaryQuery,
   type UpdateTransactionInput,
@@ -18,6 +20,7 @@ import {
 import {
   createTransaction,
   deleteTransaction,
+  getDailySpend,
   getSummary,
   getTransaction,
   listTransactions,
@@ -41,6 +44,17 @@ transactionRouter.get('/', validate({ query: listTransactionsSchema }), async (r
 transactionRouter.get('/summary', validate({ query: summarySchema }), async (req, res) => {
   const { from, to } = validatedQuery<SummaryQuery>(res);
   ok(res, { summary: await getSummary(currentUser(req).id, { from, to }) });
+});
+
+/**
+ * Spend per day, for the calendar and the trend strip. Also before `/:id`.
+ *
+ * Requires an explicit range rather than defaulting to "this month": the caller
+ * is drawing a specific window and the server should not guess which.
+ */
+transactionRouter.get('/daily', validate({ query: dailySchema }), async (req, res) => {
+  const { from, to } = validatedQuery<DailyQuery>(res);
+  ok(res, { days: await getDailySpend(currentUser(req).id, { from, to }) });
 });
 
 transactionRouter.post('/', validate({ body: createTransactionSchema }), async (req, res) => {

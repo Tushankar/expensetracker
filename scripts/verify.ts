@@ -11,7 +11,7 @@ import {
   rupeesToPaise,
 } from '../src/utils/currency';
 import { formatDayLabel, formatTime, groupByDay, monthRangeLabel } from '../src/utils/date';
-import { periodRange } from '../src/utils/period';
+import { dayKeyOf, dayFromKey, monthKeyOf, periodRange } from '../src/utils/period';
 
 /**
  * Unit checks for the pure logic behind the screens.
@@ -234,6 +234,35 @@ test('the comparison window is the month immediately before', () => {
   assert.equal(new Date(range.previousTo).getDate(), 31);
 });
 
+test('this week runs Monday to Sunday', () => {
+  // 16 September 2026 is a Wednesday.
+  const range = periodRange('week', now);
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+
+  assert.equal(from.getDay(), 1, 'the week did not start on Monday');
+  assert.equal(from.getDate(), 14);
+  assert.equal(to.getDay(), 0, 'the week did not end on Sunday');
+  assert.equal(to.getDate(), 20);
+  assert.equal(from.getHours(), 0);
+  assert.equal(to.getHours(), 23);
+});
+
+test('a week starting on a Sunday belongs to the week that just ended', () => {
+  // Sunday 20 September. A Sunday-first week would put this in the next week,
+  // separating a Saturday from the Sunday beside it.
+  const sunday = new Date(2026, 8, 20, 10, 0, 0);
+  const range = periodRange('week', sunday);
+  assert.equal(new Date(range.from).getDate(), 14);
+  assert.equal(new Date(range.to).getDate(), 20);
+});
+
+test('last week is the comparison for this week', () => {
+  const range = periodRange('week', now);
+  assert.equal(new Date(range.previousFrom).getDate(), 7);
+  assert.equal(new Date(range.previousTo).getDate(), 13);
+});
+
 test('last month selects August and compares against July', () => {
   const range = periodRange('last', now);
   assert.equal(new Date(range.from).getMonth(), 7);
@@ -250,12 +279,6 @@ test('three months covers July to September and compares with April to June', ()
   assert.equal(new Date(range.previousTo).getMonth(), 5);
 });
 
-test('six months covers April to September', () => {
-  const range = periodRange('6m', now);
-  assert.equal(new Date(range.from).getMonth(), 3);
-  assert.equal(new Date(range.to).getMonth(), 8);
-});
-
 test('the year runs January to December and compares with the year before', () => {
   const range = periodRange('year', now);
   assert.equal(new Date(range.from).getFullYear(), 2026);
@@ -265,16 +288,83 @@ test('the year runs January to December and compares with the year before', () =
   assert.equal(range.label, '2026');
 });
 
+test('a custom range spans exactly the days chosen', () => {
+  const range = periodRange(
+    { period: 'custom', customFrom: '2026-09-05', customTo: '2026-09-12' },
+    now,
+  );
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+
+  assert.equal(from.getDate(), 5);
+  assert.equal(from.getHours(), 0);
+  assert.equal(to.getDate(), 12);
+  assert.equal(to.getHours(), 23);
+  assert.equal(range.label, '5 Sep – 12 Sep');
+});
+
+test('a custom range compares against the same span immediately before', () => {
+  // 5th to 12th is eight days; the window before is the 27th to the 4th.
+  const range = periodRange(
+    { period: 'custom', customFrom: '2026-09-05', customTo: '2026-09-12' },
+    now,
+  );
+  assert.equal(new Date(range.previousTo).getDate(), 4);
+  assert.equal(new Date(range.previousFrom).getDate(), 28);
+  assert.equal(new Date(range.previousFrom).getMonth(), 7);
+});
+
+test('a single-day custom range is a single day, not zero', () => {
+  const range = periodRange(
+    { period: 'custom', customFrom: '2026-09-16', customTo: '2026-09-16' },
+    now,
+  );
+  assert.equal(new Date(range.from).getDate(), 16);
+  assert.equal(new Date(range.to).getDate(), 16);
+  assert.equal(range.label, '16 Sep');
+  assert.ok(new Date(range.to).getTime() > new Date(range.from).getTime());
+});
+
+test('a half-set custom range falls back rather than inverting', () => {
+  // The API rejects a backwards window, so an unfinished selection must never
+  // reach it.
+  const range = periodRange({ period: 'custom', customFrom: '2026-09-05' }, now);
+  assert.equal(new Date(range.from).getDate(), 1);
+  assert.equal(new Date(range.to).getMonth(), 8);
+});
+
+test('every period names the month its budgets belong to', () => {
+  // Budgets are always a calendar month. A week in September asks September.
+  assert.equal(periodRange('week', now).monthKey, '2026-09');
+  assert.equal(periodRange('month', now).monthKey, '2026-09');
+  assert.equal(periodRange('last', now).monthKey, '2026-08', 'last month asked for the wrong month');
+  assert.equal(
+    periodRange({ period: 'custom', customFrom: '2026-07-02', customTo: '2026-07-09' }, now)
+      .monthKey,
+    '2026-07',
+  );
+});
+
 test('ranges never overlap their own comparison window', () => {
-  for (const period of ['month', 'last', '3m', '6m', 'year'] as const) {
-    const range = periodRange(period, now);
+  const selections = [
+    { period: 'week' as const },
+    { period: 'month' as const },
+    { period: 'last' as const },
+    { period: '3m' as const },
+    { period: '6m' as const },
+    { period: 'year' as const },
+    { period: 'custom' as const, customFrom: '2026-09-01', customTo: '2026-09-10' },
+  ];
+
+  for (const selection of selections) {
+    const range = periodRange(selection, now);
     assert.ok(
       new Date(range.previousTo).getTime() < new Date(range.from).getTime(),
-      `${period}: the previous window runs into the current one`,
+      `${selection.period}: the previous window runs into the current one`,
     );
     assert.ok(
       new Date(range.from).getTime() < new Date(range.to).getTime(),
-      `${period}: the range is inverted`,
+      `${selection.period}: the range is inverted`,
     );
   }
 });
@@ -284,6 +374,48 @@ test('a year boundary does not roll the previous month into the wrong year', () 
   const range = periodRange('month', january);
   assert.equal(new Date(range.previousFrom).getFullYear(), 2025);
   assert.equal(new Date(range.previousFrom).getMonth(), 11);
+});
+
+test('a week that straddles a month still names both ends', () => {
+  // Wednesday 30 September 2026: the week runs into October.
+  const straddling = new Date(2026, 8, 30, 12);
+  const range = periodRange('week', straddling);
+  assert.equal(new Date(range.from).getMonth(), 8);
+  assert.equal(new Date(range.to).getMonth(), 9);
+  assert.equal(range.label, '28 Sep – 4 Oct');
+});
+
+// ------------------------------------------------------------------- day keys
+section('Day and month keys');
+
+test('a day key round-trips through a local date', () => {
+  const date = new Date(2026, 8, 5, 23, 30);
+  assert.equal(dayKeyOf(date), '2026-09-05');
+
+  const back = dayFromKey('2026-09-05');
+  assert.equal(back.getFullYear(), 2026);
+  assert.equal(back.getMonth(), 8);
+  assert.equal(back.getDate(), 5);
+});
+
+test('keys are zero-padded so they sort as strings', () => {
+  assert.equal(dayKeyOf(new Date(2026, 0, 2)), '2026-01-02');
+  assert.equal(monthKeyOf(new Date(2026, 0, 2)), '2026-01');
+
+  const keys = [
+    dayKeyOf(new Date(2026, 8, 9)),
+    dayKeyOf(new Date(2026, 8, 10)),
+    dayKeyOf(new Date(2026, 9, 1)),
+  ];
+  assert.deepEqual(keys, [...keys].sort(), 'the calendar would render days out of order');
+});
+
+test('a day key is the local day, not the UTC one', () => {
+  // 23:45 local on the 30th. Under UTC this is already the next month for
+  // anyone east of Greenwich, which would file it in the wrong calendar cell.
+  const lateNight = new Date(2026, 8, 30, 23, 45);
+  assert.equal(dayKeyOf(lateNight), '2026-09-30');
+  assert.equal(monthKeyOf(lateNight), '2026-09');
 });
 
 console.log(`\n${'='.repeat(60)}\n${passed} passed, ${failed} failed\n`);

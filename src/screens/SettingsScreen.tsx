@@ -2,9 +2,15 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Fragment, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 
-import { API_BASE_URL, useLogout, useSession } from '@/api';
+import {
+  API_BASE_URL,
+  useLogout,
+  useSession,
+  useUnreadCount,
+  useUpdateProfile,
+} from '@/api';
 import {
   Badge,
   Card,
@@ -16,12 +22,14 @@ import {
   Screen,
   SectionHeader,
   Text,
+  type IconName,
 } from '@/components/ui';
 import { ChangePasswordSheet } from '@/screens/sheets/ChangePasswordSheet';
 import { EditProfileSheet } from '@/screens/sheets/EditProfileSheet';
 import { useAuthStore } from '@/store/authStore';
 import { useAccentStore } from '@/store/themeStore';
 import { accentList, colorsByAccent, useTheme } from '@/theme';
+import { tapFeedback } from '@/utils/haptics';
 
 /**
  * Settings: who you are, how the app looks, and the way out.
@@ -42,6 +50,8 @@ export function SettingsScreen() {
   const user = useAuthStore((state) => state.user);
   const sessionQuery = useSession();
   const logout = useLogout();
+  const updateProfile = useUpdateProfile();
+  const unreadQuery = useUnreadCount();
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -105,6 +115,26 @@ export function SettingsScreen() {
             </View>
             <Badge label={profile?.currency ?? 'INR'} tone="brand" />
           </View>
+
+          {/* Shown because every budget month and recurring date is computed in
+              it. If this is wrong, a late-night expense lands in the wrong month
+              and nothing else on screen explains why. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.spacing.sm,
+              marginTop: theme.spacing.lg,
+              paddingTop: theme.spacing.md,
+              borderTopWidth: theme.layout.hairline,
+              borderTopColor: theme.colors.divider,
+            }}
+          >
+            <Icon name="clock" size={14} color={theme.colors.textTertiary} />
+            <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ flex: 1 }}>
+              {profile?.timezone ?? 'Asia/Kolkata'}
+            </Text>
+          </View>
         </Card>
 
         <View style={{ marginTop: theme.spacing.xxxl }}>
@@ -126,13 +156,73 @@ export function SettingsScreen() {
                 showChevron
                 onPress={() => openSheet(setPasswordOpen)}
               />
-              <Divider inset={44 + theme.spacing.md} />
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xxxl }}>
+          <SectionHeader title="Money" />
+          <Card padding={0} radius="xl">
+            <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ListRow
                 title="Accounts"
                 subtitle="Banks, cards, cash and wallets"
                 leading={<IconTile name="wallet" color={theme.colors.textTertiary} />}
                 showChevron
-                onPress={() => navigation.navigate('Tabs', { screen: 'Accounts' })}
+                onPress={() => navigation.navigate('Accounts')}
+              />
+              <Divider inset={44 + theme.spacing.md} />
+              <ListRow
+                title="Recurring"
+                subtitle="Rent, subscriptions, EMIs and salary"
+                leading={<IconTile name="repeat" color={theme.colors.textTertiary} />}
+                showChevron
+                onPress={() => navigation.navigate('Recurring')}
+              />
+              <Divider inset={44 + theme.spacing.md} />
+              <ListRow
+                title="Alerts"
+                subtitle="Budget and recurring notifications"
+                leading={<IconTile name="bell" color={theme.colors.textTertiary} />}
+                trailing={
+                  (unreadQuery.data ?? 0) > 0 ? (
+                    <Badge label={String(unreadQuery.data)} tone="negative" />
+                  ) : null
+                }
+                showChevron
+                onPress={() => navigation.navigate('Notifications')}
+              />
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xxxl }}>
+          <SectionHeader title="Notify me about" />
+          <Card padding={0} radius="xl">
+            <View style={{ paddingHorizontal: theme.spacing.lg }}>
+              {/* Switched off at the source: the server checks these before it
+                  writes an alert, so turning one off stops it being raised rather
+                  than hiding it here. */}
+              <ToggleRow
+                title="Budgets"
+                subtitle="Once when you get close, once if you go over"
+                icon="target"
+                value={profile?.notificationPrefs?.budgetAlerts ?? true}
+                busy={updateProfile.isPending}
+                onChange={(budgetAlerts) =>
+                  updateProfile.mutate({ notificationPrefs: { budgetAlerts } })
+                }
+              />
+              <Divider inset={44 + theme.spacing.md} />
+              <ToggleRow
+                title="Recurring"
+                subtitle="Before a charge is due, and when it is recorded"
+                icon="repeat"
+                value={profile?.notificationPrefs?.recurringAlerts ?? true}
+                busy={updateProfile.isPending}
+                onChange={(recurringAlerts) =>
+                  updateProfile.mutate({ notificationPrefs: { recurringAlerts } })
+                }
               />
             </View>
           </Card>
@@ -258,5 +348,82 @@ export function SettingsScreen() {
         onClose={() => setPasswordOpen(false)}
       />
     </>
+  );
+}
+
+type ToggleRowProps = {
+  title: string;
+  subtitle: string;
+  icon: IconName;
+  value: boolean;
+  busy: boolean;
+  onChange: (value: boolean) => void;
+};
+
+/**
+ * A preference switch.
+ *
+ * A tappable row rather than a `Switch`: the platform control comes with its own
+ * colours and its own idea of size, and this is the one place a themed app
+ * usually gives itself away.
+ */
+function ToggleRow({ title, subtitle, icon, value, busy, onChange }: ToggleRowProps) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (busy) return;
+        tapFeedback();
+        onChange(!value);
+      }}
+      accessibilityRole="switch"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      accessibilityState={{ checked: value, disabled: busy }}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.md,
+        minHeight: 64,
+        paddingVertical: theme.spacing.md,
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      <IconTile
+        name={icon}
+        color={value ? theme.colors.brandText : theme.colors.textTertiary}
+      />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text variant="label" numberOfLines={1}>
+          {title}
+        </Text>
+        <Text variant="caption" tone="tertiary" numberOfLines={2}>
+          {subtitle}
+        </Text>
+      </View>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{
+          width: 46,
+          height: 28,
+          borderRadius: 14,
+          padding: 3,
+          justifyContent: 'center',
+          alignItems: value ? 'flex-end' : 'flex-start',
+          backgroundColor: value ? theme.colors.brand : theme.colors.surfaceStrong,
+        }}
+      >
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            backgroundColor: value ? theme.colors.textOnAccent : theme.colors.textTertiary,
+          }}
+        />
+      </View>
+    </Pressable>
   );
 }

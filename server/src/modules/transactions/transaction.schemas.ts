@@ -117,9 +117,24 @@ export const summarySchema = z.object({
   to: isoDate.optional(),
 });
 
+/** The calendar always draws a known window, so both ends are required. */
+export const dailySchema = z
+  .object({ from: isoDate, to: isoDate })
+  .refine((value) => value.from <= value.to, {
+    message: 'The start date must come before the end date',
+    path: ['from'],
+  })
+  .refine((value) => value.to.getTime() - value.from.getTime() <= 400 * 86_400_000, {
+    // A year and a bit. Past that the grouping is cheap but the response is not,
+    // and no screen draws more than a year of days at once.
+    message: 'Ask for at most a year at a time',
+    path: ['to'],
+  });
+
 export const transactionIdParam = z.object({ id: objectId });
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
 export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>;
 export type SummaryQuery = z.infer<typeof summarySchema>;
+export type DailyQuery = z.infer<typeof dailySchema>;

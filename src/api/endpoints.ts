@@ -1,15 +1,24 @@
 import { request, requestData } from './client';
 import type {
   Account,
+  AppNotification,
   AuthSession,
+  BudgetProgress,
+  BudgetSummary,
   Category,
+  CreateBudgetInput,
+  CreateRecurringInput,
   CreateAccountInput,
   CreateTransactionInput,
   PageMeta,
+  DailySpend,
+  RecurringRule,
   Summary,
   Transaction,
   TransactionFilters,
   UpdateAccountInput,
+  UpdateBudgetInput,
+  UpdateRecurringInput,
   UpdateTransactionInput,
   User,
 } from './types';
@@ -52,7 +61,12 @@ export const authApi = {
 // ----------------------------------------------------------------------- users
 
 export const userApi = {
-  update(patch: { name?: string; currency?: string }) {
+  update(patch: {
+    name?: string;
+    currency?: string;
+    timezone?: string;
+    notificationPrefs?: { budgetAlerts?: boolean; recurringAlerts?: boolean };
+  }) {
     return requestData<{ user: User }>('/users/me', { method: 'PATCH', body: patch });
   },
 
@@ -178,5 +192,129 @@ export const transactionApi = {
     return requestData<{ summary: Summary }>('/transactions/summary', { params: range }).then(
       (data) => data.summary,
     );
+  },
+
+  /** Spend per local day, for the calendar and the trend strip. */
+  daily(range: { from: string; to: string }) {
+    return requestData<{ days: DailySpend[] }>('/transactions/daily', { params: range }).then(
+      (data) => data.days,
+    );
+  },
+};
+
+// --------------------------------------------------------------------- budgets
+
+export const budgetApi = {
+  /**
+   * Caps and progress together. There is no bare "list the budgets" call — a cap
+   * without what has been spent against it is not something any screen shows.
+   */
+  summary(month?: string) {
+    return requestData<{ summary: BudgetSummary }>('/budgets', { params: { month } }).then(
+      (data) => data.summary,
+    );
+  },
+
+  create(input: CreateBudgetInput) {
+    return requestData<{ budget: BudgetProgress }>('/budgets', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.budget);
+  },
+
+  update(id: string, patch: UpdateBudgetInput) {
+    return requestData<{ budget: BudgetProgress }>(`/budgets/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    }).then((data) => data.budget);
+  },
+
+  remove(id: string) {
+    return requestData<{ deleted: boolean }>(`/budgets/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ------------------------------------------------------------------- recurring
+
+export const recurringApi = {
+  list(includeInactive = false) {
+    return requestData<{ recurring: RecurringRule[] }>('/recurring', {
+      params: { includeInactive: includeInactive ? 'true' : 'false' },
+    }).then((data) => data.recurring);
+  },
+
+  upcoming(withinDays = 14, limit = 5) {
+    return requestData<{ recurring: RecurringRule[] }>('/recurring/upcoming', {
+      params: { withinDays, limit },
+    }).then((data) => data.recurring);
+  },
+
+  get(id: string) {
+    return requestData<{ recurring: RecurringRule }>(`/recurring/${id}`).then(
+      (data) => data.recurring,
+    );
+  },
+
+  create(input: CreateRecurringInput) {
+    return requestData<{ recurring: RecurringRule }>('/recurring', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.recurring);
+  },
+
+  update(id: string, patch: UpdateRecurringInput) {
+    return requestData<{ recurring: RecurringRule }>(`/recurring/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    }).then((data) => data.recurring);
+  },
+
+  setPaused(id: string, paused: boolean) {
+    return requestData<{ recurring: RecurringRule }>(`/recurring/${id}/pause`, {
+      method: 'POST',
+      body: { paused },
+    }).then((data) => data.recurring);
+  },
+
+  remove(id: string) {
+    return requestData<{ deleted: boolean }>(`/recurring/${id}`, { method: 'DELETE' });
+  },
+};
+
+// --------------------------------------------------------------- notifications
+
+export const notificationApi = {
+  list(page = 1, limit = 25) {
+    return requestData<{ notifications: AppNotification[]; unread: number }>('/notifications', {
+      params: { page, limit },
+    });
+  },
+
+  /** Just the badge. One indexed count, rather than pages nobody is reading. */
+  unreadCount() {
+    return requestData<{ unread: number }>('/notifications/unread-count').then(
+      (data) => data.unread,
+    );
+  },
+
+  markRead(id: string) {
+    return requestData<{ notification: AppNotification }>(`/notifications/${id}/read`, {
+      method: 'POST',
+    }).then((data) => data.notification);
+  },
+
+  markAllRead() {
+    return requestData<{ updated: number }>('/notifications/read-all', { method: 'POST' });
+  },
+
+  clearAll() {
+    return requestData<{ deleted: number }>('/notifications', { method: 'DELETE' });
+  },
+
+  registerDevice(token: string) {
+    return requestData<{ deleted: boolean }>('/notifications/device', {
+      method: 'POST',
+      body: { token },
+    });
   },
 };

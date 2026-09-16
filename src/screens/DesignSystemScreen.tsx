@@ -20,6 +20,8 @@ import {
   SkeletonRow,
   Text,
 } from '@/components/ui';
+import { BudgetRow } from '@/components/budgets/BudgetRow';
+import type { BudgetProgress } from '@/api/types';
 import { useTheme, type TypeVariant } from '@/theme';
 import { RUPEE, applyAmountKey, formatAmountInput } from '@/utils/currency';
 
@@ -32,6 +34,62 @@ const TYPE_SAMPLES: { variant: TypeVariant; label: string }[] = [
   { variant: 'label', label: 'Label' },
   { variant: 'caption', label: 'Caption' },
   { variant: 'overline', label: 'Overline' },
+];
+
+/**
+ * The three states a budget bar can be in, side by side. Colour carries the
+ * meaning here, so a change to the palette has to be checked against all three
+ * at once rather than one at a time on a real screen.
+ */
+const BUDGET_SAMPLES: BudgetProgress[] = [
+  {
+    id: 'on-track',
+    scope: 'category',
+    categoryId: 'c1',
+    categoryName: 'Transport',
+    categoryIcon: 'transport',
+    categoryColor: 'transport',
+    amount: 300000,
+    spent: 210000,
+    remaining: 90000,
+    overBy: 0,
+    percent: 70,
+    warnAtPercent: 80,
+    state: 'on_track',
+    isActive: true,
+  },
+  {
+    id: 'warning',
+    scope: 'category',
+    categoryId: 'c2',
+    categoryName: 'Shopping',
+    categoryIcon: 'shopping',
+    categoryColor: 'shopping',
+    amount: 500000,
+    spent: 380000,
+    remaining: 120000,
+    overBy: 0,
+    percent: 76,
+    warnAtPercent: 75,
+    state: 'warning',
+    isActive: true,
+  },
+  {
+    id: 'exceeded',
+    scope: 'category',
+    categoryId: 'c3',
+    categoryName: 'Food',
+    categoryIcon: 'food',
+    categoryColor: 'food',
+    amount: 700000,
+    spent: 770000,
+    remaining: 0,
+    overBy: 70000,
+    percent: 110,
+    warnAtPercent: 80,
+    state: 'exceeded',
+    isActive: true,
+  },
 ];
 
 type StateDemo = 'loading' | 'empty' | 'error';
@@ -202,6 +260,17 @@ export function DesignSystemScreen() {
             onLongBackspace={() => setAmount('')}
             style={{ marginTop: theme.spacing.lg }}
           />
+        </Card>
+      </View>
+
+      <View style={{ marginTop: theme.spacing.xxxl }}>
+        <SectionHeader title="Budget states" />
+        <Card padding={0} radius="xl">
+          <View style={{ paddingHorizontal: theme.spacing.lg }}>
+            {BUDGET_SAMPLES.map((budget) => (
+              <BudgetRow key={budget.id} budget={budget} />
+            ))}
+          </View>
         </Card>
       </View>
 

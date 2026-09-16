@@ -12,7 +12,8 @@ cp .env.example .env     # then fill in MONGODB_URI and the two JWT secrets
 npm run dev              # http://localhost:4000/api/v1
 
 npm run seed             # optional: a demo user with a month of transactions
-npm run test:api         # integration tests, against the running server
+npm run test:api         # core integration tests, against the running server
+npm run test:step        # budgets, recurring, notifications, time zones
 ```
 
 Generate the secrets with:
@@ -43,7 +44,20 @@ transaction.
 | `PATCH`/`DELETE` | `/categories/:id` | Built-in categories are read-only. |
 | `GET`/`POST` | `/transactions` | Filters below. |
 | `GET` | `/transactions/summary` | `?from&to` — totals and the category split. |
+| `GET` | `/transactions/daily` | `?from&to` — spend per local day, for the calendar. |
 | `GET`/`PATCH`/`DELETE` | `/transactions/:id` | |
+| `GET` | `/budgets` | `?month=YYYY-MM` — caps *and* progress in one response. |
+| `POST` | `/budgets` | Overall or per category. |
+| `PATCH`/`DELETE` | `/budgets/:id` | |
+| `GET`/`POST` | `/recurring` | `?includeInactive=true` for finished rules. |
+| `GET` | `/recurring/upcoming` | `?withinDays&limit` — the strip on Home. |
+| `POST` | `/recurring/run` | Forces a scheduler pass. Safe at any time. |
+| `GET`/`PATCH`/`DELETE` | `/recurring/:id` | |
+| `POST` | `/recurring/:id/pause` | `{ paused }` |
+| `GET` | `/notifications` | `?page&limit&unreadOnly` |
+| `GET` | `/notifications/unread-count` | Just the badge. |
+| `POST` | `/notifications/:id/read`, `/read-all` | |
+| `POST`/`DELETE` | `/notifications/device` | Push token registration. |
 
 List filters: `page`, `limit` (max 100), `type`, `accountId`, `categoryId`,
 `paymentMethod`, `q`, `from`, `to`, `minAmount`, `maxAmount`, `sort`
@@ -64,6 +78,103 @@ under the right input rather than in a banner at the top.
 
 Codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `TOKEN_EXPIRED`, `FORBIDDEN`, `NOT_FOUND`,
 `CONFLICT`, `RATE_LIMITED`, `PAYLOAD_TOO_LARGE`, `INTERNAL`.
+
+## Dates and time zones
+
+Every boundary the server computes for itself — which month a budget covers, when
+a recurring rule fires, which day a transaction is bucketed into — is a *local*
+boundary, and local means the zone on the user's record (`user.timezone`, default
+`Asia/Kolkata`), not the server's.
+
+This is not a rounding error. A transaction entered at 11pm IST on the 30th lands
+in the following month under UTC, which moves it out of the budget it was meant to
+count against and into one that has not started yet. The user sees a budget that
+does not add up and nothing on screen to explain why.
+
+`lib/time.ts` owns all of it, on Luxon rather than hand-rolled `Intl` arithmetic.
+India has no DST, so nothing here would visibly break today — but "our users do
+not have DST" is an assumption that becomes false the first time someone travels,
+and offset maths is the classic place to be quietly wrong for years. The daily
+aggregation groups with Mongo's own `$dateToString` `timezone` option, so a month
+of transactions never crosses the wire just to be counted.
+
+The mobile app computes its period boundaries from the *device*, and syncs the
+device zone onto the account at launch, so the two always agree about what day it
+is.
+
+## Budgets
+
+A budget is a standing rule, not a row per month. Materialising one document per
+category per month would mean a write every month for every user just to keep the
+same numbers, and a gap in the data for anyone who did not open the app. The cap
+is stored once and the spend against it is aggregated from the transactions on
+read — which also means editing a budget corrects history rather than only
+applying going forward, which is what someone who just fixed a typo expects.
+
+`GET /budgets` returns caps and progress together. Two aggregations and one
+category read regardless of how many budgets exist: the spend is grouped by
+category in the database rather than queried per budget, which would be a round
+trip per row on a screen that shows a dozen.
+
+Transfers cannot consume a budget, by construction — the aggregation's `$match` is
+`type: 'expense'`, so an ATM withdrawal is invisible to it.
+
+`remaining` is floored at zero and `overBy` carries the other half, so a client
+never has to decide what a negative "remaining" means.
+
+## Recurring transactions
+
+The schedule is a unit plus an interval, not a named frequency: "monthly",
+"weekly" and "yearly" are `{month,1}`, `{week,1}` and `{year,1}`, so "every 3
+months" costs nothing extra instead of a fifth enum value with its own branch
+everywhere.
+
+Occurrences are **counted, never accumulated**. `nextRunAt` is always recomputed
+as `startDate + unit × interval × occurrencesCreated`, so a rule anchored on the
+31st keeps the 31st in every long month instead of collapsing to the 28th the
+first time February clamps it. Stepping one interval at a time gets that wrong,
+permanently, on the first short month.
+
+Two different first-run policies, because creating and resuming are different
+intentions:
+
+- **Creating or re-scheduling catches up once.** Adding "Netflix, monthly, from
+  the 5th" on the 16th records this month's charge — and only this month's. The
+  eight occurrences between January and September are skipped, because someone
+  adding a rule wants a rule, not nine backdated debits that rewrite closed months
+  and wreck the balance.
+- **Resuming skips to the future.** A gym membership paused for three months must
+  not charge on the way back in.
+
+The scheduler is one in-process interval, not a cron service, because correctness
+does not depend on the cadence: every pass asks the database what is due, and the
+occurrence counter makes a repeat a no-op. Running late writes the same
+transactions a moment later; running twice writes them once. It does assume a
+single process — two instances would both pick up the same rule, and the fix at
+that point is a lock collection, not a shorter interval.
+
+## Notifications
+
+Four kinds: budget nearing its limit, budget exceeded, a recurring charge coming
+up, a recurring charge recorded.
+
+The important field is `dedupeKey`. Every alert is *about* a specific thing in a
+specific period — this budget, this month; this rule, this occurrence — and the
+key names exactly that. A unique index on it makes "do not spam the user" a
+property of the database rather than a discipline the calling code has to
+remember: the budget check runs after **every** transaction write, and all but the
+first insert for a given month simply fail the index and are ignored. That also
+survives restarts, concurrent writes and two devices saving at once, none of which
+an in-memory "already sent" set would.
+
+Crossing from warning into exceeded *does* produce a second alert, because the two
+keys differ — which is right, they are different pieces of news.
+
+Per-user preferences are checked before an alert is written, so switching one off
+stops it at the source rather than hiding it in the client. Push itself is a seam:
+`deliver()` in `notification.service.ts` logs and returns, device tokens are
+already stored on the user, and turning it on is one call to Expo's push service
+from inside that function with no other file changing.
 
 ## Things worth knowing
 
@@ -117,11 +228,13 @@ src/
   config/      env (zod-validated at boot), logger (pino), db (+ transaction support)
   lib/         ApiError, the response envelope, tokens, passwords, sessions, paging
   middleware/  auth, validate, rate limits, request id + logging, error handler
+  lib/time     Timezone and recurrence arithmetic (Luxon)
   modules/     auth · users · accounts · categories · transactions
+               budgets · recurring (+ scheduler) · notifications
                (each: model, schemas, service, routes — controllers where they earn it)
   routes/      v1 router
   seed/        the Indian default category tree, and per-user seeding
-  scripts/     seed (demo data), apitest (integration tests)
+  scripts/     seed (demo data), apitest + steptest (integration tests)
 ```
 
 Services never touch `req`/`res`; routes never touch Mongoose. That split is what lets

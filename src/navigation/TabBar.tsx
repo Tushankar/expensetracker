@@ -17,7 +17,7 @@ import type { MainTabParamList } from './types';
 const TAB_ICONS: Record<keyof MainTabParamList, IconName> = {
   Home: 'home',
   Transactions: 'list',
-  Accounts: 'wallet',
+  Budgets: 'target',
   Settings: 'settings',
 };
 

@@ -73,7 +73,7 @@ export async function raise(input: RaiseInput): Promise<boolean> {
     const preference = PREFERENCE_FOR[input.type];
     if (user.notificationPrefs?.[preference] === false) return false;
 
-    const created = await NotificationModel.findOneAndUpdate(
+    const result = await NotificationModel.updateOne(
       { userId: input.userId, dedupeKey: input.dedupeKey },
       {
         $setOnInsert: {
@@ -86,13 +86,15 @@ export async function raise(input: RaiseInput): Promise<boolean> {
           readAt: null,
         },
       },
-      { upsert: true, new: false, rawResult: true },
+      { upsert: true },
     );
 
-    // `lastErrorObject.updatedExisting` is false exactly when this call inserted.
-    const isNew = created?.lastErrorObject?.updatedExisting === false;
+    // An upsert rather than a create-and-catch: the write reaches the database
+    // once either way, and `upsertedCount` says plainly whether this call was the
+    // one that inserted. A duplicate is the normal path, not an exception.
+    const isNew = result.upsertedCount === 1;
     if (isNew) await deliver(input);
-    return Boolean(isNew);
+    return isNew;
   } catch (error) {
     // Includes the duplicate-key race between two concurrent upserts, which is a
     // correct outcome rather than a failure.

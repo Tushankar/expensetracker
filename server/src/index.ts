@@ -4,11 +4,16 @@ import { createApp } from './app';
 import { connectDatabase, disconnectDatabase } from './config/db';
 import { env } from './config/env';
 import { logger } from './config/logger';
+import { startScheduler, stopScheduler } from './modules/recurring/recurring.scheduler';
 
 async function main(): Promise<void> {
   // Connect first. A server that accepts requests before the database is up
   // answers the first few with a 500 and looks broken on every cold start.
   await connectDatabase();
+
+  // After the database, before the listener: the first pass catches everything
+  // that came due while the process was down.
+  if (env.RECURRING_ENABLED) startScheduler(env.RECURRING_INTERVAL_MS);
 
   const app = createApp();
   const server: Server = app.listen(env.PORT, () => {
@@ -31,6 +36,8 @@ async function main(): Promise<void> {
       process.exit(1);
     }, 10_000);
     forced.unref();
+
+    stopScheduler();
 
     server.close(async () => {
       await disconnectDatabase();

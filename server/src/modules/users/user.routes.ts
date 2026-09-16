@@ -16,6 +16,14 @@ const updateProfileSchema = z
   .object({
     name: z.string().trim().min(1).max(80).optional(),
     currency: z.string().trim().toUpperCase().length(3).optional(),
+    /** Validated against the runtime's zone database in the service. */
+    timezone: z.string().trim().min(1).max(64).optional(),
+    notificationPrefs: z
+      .object({
+        budgetAlerts: z.boolean().optional(),
+        recurringAlerts: z.boolean().optional(),
+      })
+      .optional(),
   })
   // An empty PATCH is a client bug, and silently returning the unchanged user
   // hides it until someone wonders why the name never saves.

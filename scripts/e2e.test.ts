@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 
 import { accountApi, authApi, categoryApi, transactionApi, userApi } from '../src/api/endpoints';
+import { request } from '../src/api/client';
 import { ApiError, NetworkError, errorMessage } from '../src/api/errors';
 import { useAuthStore } from '../src/store/authStore';
-import { periodRange } from '../src/utils/period';
+import { dayKeyOf, monthKeyOf, periodRange } from '../src/utils/period';
 
 /**
  * The mobile data layer, against a real server and a real database.
@@ -376,6 +377,279 @@ async function main(): Promise<void> {
     assert.ok((await accountApi.list(true)).some((account) => account.id === cashId));
   });
 
+
+  // ------------------------------------------------------------------ step 3
+  section('Budgets');
+
+  let foodBudgetId = '';
+
+  await test('a budget can be created and read back with progress', async () => {
+    const { budgetApi } = await import('../src/api/endpoints');
+    const month = monthKeyOf(new Date());
+
+    // Comfortably above whatever this category has already taken in the run, so
+    // the progression from on-track to exceeded below is the one being tested.
+    const budget = await budgetApi.create({
+      scope: 'category',
+      categoryId: expenseCategoryId,
+      amount: rupees(20000),
+    });
+    foodBudgetId = budget.id;
+
+    const summary = await budgetApi.summary(month);
+    const found = summary.categories.find((entry) => entry.id === budget.id);
+
+    assert.ok(found, 'the budget is missing from its own month');
+    assert.equal(found.amount, rupees(20000));
+    assert.equal(found.state, 'on_track');
+    assert.equal(found.categoryName, 'Swiggy', 'the category was not resolved for the row');
+  });
+
+  await test('spending moves the budget, and the figures add up', async () => {
+    const { budgetApi } = await import('../src/api/endpoints');
+    const month = monthKeyOf(new Date());
+
+    // This category already carries spend from the transaction section above, so
+    // the assertions are on the delta rather than on an absolute figure.
+    const before = (await budgetApi.summary(month)).categories.find(
+      (entry) => entry.id === foodBudgetId,
+    )!;
+
+    await transactionApi.create({
+      type: 'expense',
+      amount: rupees(1000),
+      categoryId: expenseCategoryId,
+      accountId: bankId,
+      merchant: 'Swiggy',
+    });
+
+    const after = (await budgetApi.summary(month)).categories.find(
+      (entry) => entry.id === foodBudgetId,
+    )!;
+
+    assert.equal(after.spent, before.spent + rupees(1000));
+    assert.equal(after.spent + after.remaining, after.amount, 'spent + remaining is not the cap');
+    assert.equal(after.percent, Math.round((after.spent / after.amount) * 100));
+    assert.equal(after.state, 'on_track');
+  });
+
+  await test('going over reports how far, and remaining stops at zero', async () => {
+    const { budgetApi } = await import('../src/api/endpoints');
+    const month = monthKeyOf(new Date());
+
+    const before = (await budgetApi.summary(month)).categories.find(
+      (entry) => entry.id === foodBudgetId,
+    )!;
+
+    // Enough to clear whatever is left, plus ₹500.
+    await transactionApi.create({
+      type: 'expense',
+      amount: before.remaining + rupees(500),
+      categoryId: expenseCategoryId,
+      accountId: bankId,
+      merchant: 'Dinner',
+    });
+
+    const after = (await budgetApi.summary(month)).categories.find(
+      (entry) => entry.id === foodBudgetId,
+    )!;
+
+    assert.equal(after.state, 'exceeded');
+    assert.equal(after.overBy, rupees(500));
+    assert.equal(after.remaining, 0, 'remaining went negative');
+    assert.ok(after.percent > 100);
+  });
+
+  await test('a transfer never consumes a budget', async () => {
+    const { budgetApi } = await import('../src/api/endpoints');
+    const month = monthKeyOf(new Date());
+    const before = (await budgetApi.summary(month)).totals.spent;
+
+    await transactionApi.create({
+      type: 'transfer',
+      amount: rupees(15000),
+      accountId: bankId,
+      destinationAccountId: cashId,
+    });
+
+    const after = (await budgetApi.summary(month)).totals.spent;
+    assert.equal(after, before, 'a transfer reached the budget totals');
+  });
+
+  await test('the dashboard asks for the month its period sits in', async () => {
+    const { budgetApi } = await import('../src/api/endpoints');
+
+    // A week in this month must ask this month for its budgets, not last month's.
+    const week = periodRange('week');
+    const summary = await budgetApi.summary(week.monthKey);
+    assert.equal(summary.month, week.monthKey);
+    assert.ok(summary.categories.some((entry) => entry.id === foodBudgetId));
+  });
+
+  section('Recurring');
+
+  let ruleId = '';
+
+  await test('a rule is created, and says when it runs next', async () => {
+    const { recurringApi } = await import('../src/api/endpoints');
+
+    const rule = await recurringApi.create({
+      type: 'expense',
+      name: 'Netflix',
+      amount: rupees(649),
+      categoryId: expenseCategoryId,
+      accountId: cashId,
+      unit: 'month',
+      interval: 1,
+      startDate: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    });
+
+    ruleId = rule.id;
+    assert.equal(rule.scheduleLabel, 'Every month');
+    assert.ok(rule.nextRunAt && new Date(rule.nextRunAt).getTime() > Date.now());
+    assert.equal(rule.isPaused, false);
+    assert.equal(rule.isActive, true);
+  });
+
+  await test('it shows up in the upcoming list Home reads', async () => {
+    const { recurringApi } = await import('../src/api/endpoints');
+    const upcoming = await recurringApi.upcoming(14, 5);
+    assert.ok(upcoming.some((rule) => rule.id === ruleId));
+    assert.ok(upcoming.every((rule) => rule.isActive && !rule.isPaused));
+  });
+
+  await test('a due rule records its transaction and moves the balance', async () => {
+    const { recurringApi } = await import('../src/api/endpoints');
+
+    const before = (await accountApi.get(cashId)).balance;
+
+    // Yesterday, so the first pass has something to do. Creating catches up one
+    // occurrence — see `initialSchedule` on the server.
+    await recurringApi.create({
+      type: 'expense',
+      name: 'Gym',
+      amount: rupees(2500),
+      categoryId: expenseCategoryId,
+      accountId: cashId,
+      unit: 'month',
+      interval: 1,
+      startDate: new Date(Date.now() - 86_400_000).toISOString(),
+    });
+
+    await request('/recurring/run', { method: 'POST' });
+
+    assert.equal((await accountApi.get(cashId)).balance, before - rupees(2500));
+  });
+
+  await test('running the scheduler again does not bill twice', async () => {
+    const before = (await accountApi.get(cashId)).balance;
+    await request('/recurring/run', { method: 'POST' });
+    await request('/recurring/run', { method: 'POST' });
+    assert.equal((await accountApi.get(cashId)).balance, before);
+  });
+
+  await test('pausing and resuming does not backfill', async () => {
+    const { recurringApi } = await import('../src/api/endpoints');
+
+    const paused = await recurringApi.setPaused(ruleId, true);
+    assert.equal(paused.isPaused, true);
+
+    const before = (await accountApi.get(cashId)).balance;
+    const resumed = await recurringApi.setPaused(ruleId, false);
+    assert.equal(resumed.isPaused, false);
+    assert.ok(new Date(resumed.nextRunAt!).getTime() > Date.now());
+
+    await request('/recurring/run', { method: 'POST' });
+    assert.equal((await accountApi.get(cashId)).balance, before, 'resuming wrote a backdated charge');
+  });
+
+  await test('deleting a rule keeps the transactions it wrote', async () => {
+    const { recurringApi } = await import('../src/api/endpoints');
+    const before = (await transactionApi.list({ q: 'Gym' })).transactions.length;
+    assert.ok(before > 0, 'the rule never wrote anything');
+
+    const rules = await recurringApi.list();
+    const gym = rules.find((rule) => rule.name === 'Gym')!;
+    await recurringApi.remove(gym.id);
+
+    assert.equal((await transactionApi.list({ q: 'Gym' })).transactions.length, before);
+  });
+
+  section('Alerts and the calendar');
+
+  await test('crossing a budget raised alerts, once each', async () => {
+    const { notificationApi } = await import('../src/api/endpoints');
+    // The budget check is fire-and-forget on the server; give it a beat.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    const { notifications } = await notificationApi.list();
+    const exceeded = notifications.filter((row) => row.type === 'budget_exceeded');
+
+    assert.ok(exceeded.length >= 1, 'no over-budget alert');
+    assert.equal(
+      new Set(exceeded.map((row) => row.title)).size,
+      exceeded.length,
+      'the same budget was announced twice',
+    );
+  });
+
+  await test('the unread badge matches, and marking read moves it', async () => {
+    const { notificationApi } = await import('../src/api/endpoints');
+
+    const unread = await notificationApi.unreadCount();
+    assert.ok(unread > 0);
+
+    const { notifications } = await notificationApi.list();
+    const first = notifications[0]!;
+    const read = await notificationApi.markRead(first.id);
+    assert.equal(read.read, true);
+
+    assert.equal(await notificationApi.unreadCount(), unread - 1);
+
+    await notificationApi.markAllRead();
+    assert.equal(await notificationApi.unreadCount(), 0);
+  });
+
+  await test('daily spending comes back keyed by local day, in order', async () => {
+    const range = periodRange('month');
+    const days = await transactionApi.daily({ from: range.from, to: range.to });
+
+    assert.ok(days.length > 0);
+    assert.ok(days.every((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date)));
+    assert.deepEqual(
+      days.map((day) => day.date),
+      [...days.map((day) => day.date)].sort(),
+      'the calendar would render days out of order',
+    );
+
+    // The key the calendar looks a day up by has to be the key the server sends.
+    const todayKey = dayKeyOf(new Date());
+    const today = days.find((day) => day.date === todayKey);
+    assert.ok(today, "today's row is missing, so the calendar would show it empty");
+    assert.ok(today.expense > 0);
+  });
+
+  await test('daily spending and the period summary agree', async () => {
+    const range = periodRange('month');
+    const [days, summary] = await Promise.all([
+      transactionApi.daily({ from: range.from, to: range.to }),
+      transactionApi.summary({ from: range.from, to: range.to }),
+    ]);
+
+    assert.equal(
+      days.reduce((total, day) => total + day.expense, 0),
+      summary.expense,
+      'the calendar and the dashboard disagree about the month',
+    );
+    assert.ok(summary.transferred > 0, 'the transfer vanished from the summary entirely');
+  });
+
+  await test('the profile carries the timezone the server does its maths in', async () => {
+    const { user } = await authApi.me();
+    assert.ok(user.timezone.includes('/'), `not an IANA zone: ${user.timezone}`);
+    assert.equal(typeof user.notificationPrefs.budgetAlerts, 'boolean');
+  });
+
   // ----------------------------------------------------------------- offline
   section('Network failure');
 
@@ -383,7 +657,6 @@ async function main(): Promise<void> {
     // A port nothing is listening on is the closest thing to aeroplane mode that
     // a test can arrange, and it exercises the same branch.
     const original = process.env.EXPO_PUBLIC_API_URL;
-    const { request } = await import('../src/api/client');
 
     // The base URL is resolved at import time, so reach past the endpoint
     // wrappers and aim a raw request at a dead port.

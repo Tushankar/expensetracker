@@ -26,6 +26,13 @@ export type User = {
   name: string;
   email: string;
   currency: string;
+  /**
+   * IANA zone. The server computes budget months and recurring dates in it, so
+   * the app keeps it in step with the device to stop the two disagreeing about
+   * which month a late-night expense belongs to.
+   */
+  timezone: string;
+  notificationPrefs: { budgetAlerts: boolean; recurringAlerts: boolean };
   createdAt: string;
   updatedAt: string;
 };
@@ -220,4 +227,153 @@ export const ACCOUNT_TYPE_ICON: Record<AccountType, string> = {
   credit_card: 'card',
   wallet: 'wallet',
   other: 'circle',
+};
+
+// ------------------------------------------------------------------- step 3
+
+export type BudgetScope = 'overall' | 'category';
+export type BudgetState = 'on_track' | 'warning' | 'exceeded';
+
+export type BudgetProgress = {
+  id: string;
+  scope: BudgetScope;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryIcon: string | null;
+  /** Hue key from the palette. Resolve with `categoryColor`. */
+  categoryColor: string | null;
+  /** Integer paise. */
+  amount: number;
+  spent: number;
+  /** `amount − spent`, floored at zero. Never negative — that is what `overBy` is for. */
+  remaining: number;
+  overBy: number;
+  /** 0–100+. Over 100 on purpose when a budget is blown. */
+  percent: number;
+  warnAtPercent: number;
+  state: BudgetState;
+  isActive: boolean;
+};
+
+export type BudgetSummary = {
+  /** `YYYY-MM`. */
+  month: string;
+  from: string;
+  to: string;
+  overall: BudgetProgress | null;
+  categories: BudgetProgress[];
+  totals: {
+    budgeted: number;
+    spent: number;
+    remaining: number;
+    /** Spending in categories with no cap — what the budgets do not cover. */
+    unbudgetedSpend: number;
+  };
+};
+
+export type CreateBudgetInput =
+  | { scope: 'overall'; amount: number; warnAtPercent?: number }
+  | { scope: 'category'; categoryId: string; amount: number; warnAtPercent?: number };
+
+export type UpdateBudgetInput = { amount?: number; warnAtPercent?: number; isActive?: boolean };
+
+/**
+ * A recurrence is a unit plus an interval, not a named frequency: "monthly" is
+ * `{month, 1}` and "every 2 weeks" is `{week, 2}`. One representation means the
+ * presets and a custom schedule share every code path.
+ */
+export type RecurrenceUnit = 'day' | 'week' | 'month' | 'year';
+
+export type RecurringRule = {
+  id: string;
+  name: string;
+  type: TransactionType;
+  amount: number;
+  categoryId: string | null;
+  accountId: string;
+  destinationAccountId: string | null;
+  description: string;
+  paymentMethod: PaymentMethod;
+  unit: RecurrenceUnit;
+  interval: number;
+  /** "Every month", "Every 2 weeks" — worded by the server so both clients agree. */
+  scheduleLabel: string;
+  startDate: string;
+  endDate: string | null;
+  maxOccurrences: number | null;
+  occurrencesCreated: number;
+  /** Null once the rule has finished. */
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  isPaused: boolean;
+  isActive: boolean;
+  /** False means "remind me" rather than "record it for me". */
+  autoCreate: boolean;
+};
+
+type RecurringBase = {
+  name: string;
+  amount: number;
+  accountId: string;
+  description?: string;
+  paymentMethod?: PaymentMethod;
+  unit: RecurrenceUnit;
+  interval?: number;
+  startDate: string;
+  endDate?: string | null;
+  maxOccurrences?: number | null;
+  autoCreate?: boolean;
+};
+
+export type CreateRecurringInput =
+  | ({ type: 'expense' | 'income'; categoryId: string } & RecurringBase)
+  | ({ type: 'transfer'; destinationAccountId: string } & RecurringBase);
+
+export type UpdateRecurringInput = Partial<Omit<RecurringBase, 'startDate'>> & {
+  startDate?: string;
+  categoryId?: string;
+  destinationAccountId?: string;
+};
+
+export type NotificationType =
+  | 'budget_warning'
+  | 'budget_exceeded'
+  | 'recurring_upcoming'
+  | 'recurring_created';
+
+export type AppNotification = {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  /** `{ budgetId?, categoryId?, recurringId?, transactionId?, month? }` */
+  data: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
+};
+
+export type DailySpend = {
+  /** `YYYY-MM-DD` in the account's zone. Days with no activity are absent. */
+  date: string;
+  expense: number;
+  income: number;
+  count: number;
+};
+
+/** Presets the recurring form offers, over the unit/interval representation. */
+export const RECURRENCE_PRESETS: readonly {
+  label: string;
+  unit: RecurrenceUnit;
+  interval: number;
+}[] = [
+  { label: 'Weekly', unit: 'week', interval: 1 },
+  { label: 'Monthly', unit: 'month', interval: 1 },
+  { label: 'Yearly', unit: 'year', interval: 1 },
+];
+
+export const RECURRENCE_UNIT_LABEL: Record<RecurrenceUnit, string> = {
+  day: 'days',
+  week: 'weeks',
+  month: 'months',
+  year: 'years',
 };
