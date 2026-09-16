@@ -44,6 +44,30 @@ function section(title: string): void {
 
 const rupees = (value: number) => Math.round(value * 100);
 
+/**
+ * Polls until a condition holds, or gives up.
+ *
+ * For the parts of the API that finish after the response: the budget check runs
+ * outside the transaction that triggered it, so a fixed sleep is either slower
+ * than it needs to be or shorter than it needs to be, and eventually both.
+ */
+async function waitFor<T>(
+  read: () => Promise<T>,
+  done: (value: T) => boolean,
+  { timeoutMs = 5000, everyMs = 150 } = {},
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let latest = await read();
+
+  while (!done(latest) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, everyMs));
+    latest = await read();
+  }
+
+  return latest;
+}
+
+
 async function main(): Promise<void> {
   const stamp = Date.now();
   const email = `e2e.${stamp}@paisa.test`;
@@ -579,10 +603,14 @@ async function main(): Promise<void> {
 
   await test('crossing a budget raised alerts, once each', async () => {
     const { notificationApi } = await import('../src/api/endpoints');
-    // The budget check is fire-and-forget on the server; give it a beat.
-    await new Promise((resolve) => setTimeout(resolve, 800));
 
-    const { notifications } = await notificationApi.list();
+    // The budget check is deliberately fire-and-forget on the server — an alert
+    // must never hold up the transaction that triggered it — so this polls for
+    // the result instead of sleeping a guessed interval and hoping.
+    const notifications = await waitFor(
+      async () => (await notificationApi.list()).notifications,
+      (rows) => rows.some((row) => row.type === 'budget_exceeded'),
+    );
     const exceeded = notifications.filter((row) => row.type === 'budget_exceeded');
 
     assert.ok(exceeded.length >= 1, 'no over-budget alert');

@@ -19,11 +19,32 @@ const shared: Partial<Options> = {
   },
 };
 
-/** Blanket ceiling for the whole API. Generous — this is a backstop, not a quota. */
+/**
+ * Loopback, in every form Node reports it.
+ *
+ * `::ffff:127.0.0.1` is what an IPv4 client looks like on a dual-stack socket,
+ * which is the usual shape on Windows and the one that gets missed.
+ */
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * Blanket ceiling for the whole API. Generous — this is a backstop against abuse,
+ * not a quota: a client on Home fires six queries, and a busy session is nowhere
+ * near three hundred a minute.
+ *
+ * Exempt for requests from the machine itself, outside production. The
+ * integration suites make a few hundred calls in under a minute and are not
+ * abuse; throttling them turns a real protection into a source of flaky tests,
+ * which is how rate limits end up being disabled altogether. In production
+ * `trust proxy` means `req.ip` is the real client, so nothing is exempt — and the
+ * auth limiter, which is the one that actually guards anything, applies
+ * everywhere regardless.
+ */
 export const apiLimiter = rateLimit({
   ...shared,
   windowMs: env.RATE_LIMIT_WINDOW_MS,
   limit: env.RATE_LIMIT_MAX,
+  skip: (req) => !env.isProduction && LOOPBACK.has(req.ip ?? ''),
 });
 
 /**

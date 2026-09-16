@@ -95,6 +95,30 @@ function expectError(response: { status: number; body: Envelope<unknown> }, stat
 
 const rupees = (value: number) => Math.round(value * 100);
 
+/**
+ * Polls until a condition holds, or gives up.
+ *
+ * The budget check is deliberately fire-and-forget — an alert must never hold up
+ * the transaction that triggered it — so asserting on it means waiting for a
+ * result rather than sleeping a guessed interval and hoping.
+ */
+async function waitFor<T>(
+  read: () => Promise<T>,
+  done: (value: T) => boolean,
+  { timeoutMs = 5000, everyMs = 150 } = {},
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let latest = await read();
+
+  while (!done(latest) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, everyMs));
+    latest = await read();
+  }
+
+  return latest;
+}
+
+
 const IST = 'Asia/Kolkata';
 /** A zone with DST and a non-hour offset, to catch anything hard-coded to IST. */
 const CHATHAM = 'Pacific/Chatham';
@@ -885,10 +909,16 @@ async function main(): Promise<void> {
   section('Notifications');
 
   await test('crossing a budget raised exactly one warning and one exceeded alert', async () => {
-    const { notifications } = data(
-      await call<{ notifications: Notification[]; unread: number }>('GET', '/notifications', {
-        token,
-      }),
+    const notifications = await waitFor(
+      async () =>
+        data(
+          await call<{ notifications: Notification[]; unread: number }>('GET', '/notifications', {
+            token,
+          }),
+        ).notifications,
+      (rows) =>
+        rows.some((row) => row.type === 'budget_warning') &&
+        rows.some((row) => row.type === 'budget_exceeded'),
     );
 
     const warnings = notifications.filter((row) => row.type === 'budget_warning');
@@ -916,8 +946,9 @@ async function main(): Promise<void> {
         },
       });
     }
-    // The evaluation is fire-and-forget, so give it a beat to land.
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    // Nothing to wait *for* here — the assertion is that nothing new arrives — so
+    // this is the one place a fixed pause is the right tool.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
 
     const after = data(
       await call<{ notifications: Notification[] }>('GET', '/notifications', { token }),
@@ -994,7 +1025,8 @@ async function main(): Promise<void> {
         merchant: 'Fuel',
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    // Again an absence, so a fixed pause is right: there is no arrival to await.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
 
     const { notifications } = data(
       await call<{ notifications: Notification[] }>('GET', '/notifications', { token }),
