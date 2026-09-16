@@ -1,32 +1,32 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { Sparkline } from '@/components/charts';
 import { Icon, Text } from '@/components/ui';
-import { incomeTrend, spendTrend } from '@/data/mock';
 import { useTheme } from '@/theme';
-import type { MonthSummary } from '@/types/models';
+import type { PeriodSummary } from '@/types/models';
 import { formatINR, percentChange } from '@/utils/currency';
-import { monthRangeLabel } from '@/utils/date';
 
 import { StatTile } from './StatTile';
 
 export type BalanceCardProps = {
-  summary: MonthSummary;
-  trend: readonly number[];
-  /** Available width, so the trend line can be sized without a layout pass. */
-  width: number;
+  summary: PeriodSummary;
+  /** Opens the period picker. */
+  onPeriodPress?: () => void;
 };
 
 /**
- * The screen's anchor: one very large number, the month it covers, and the two
+ * The screen's anchor: one very large number, the period it covers, and the two
  * figures that explain it.
  *
  * This is the only saturated surface in the app. Everything around it is a flat
  * card, which is what lets a single slab carry the hierarchy on its own.
+ *
+ * The balance is every active account added together, and it is the one number
+ * here that is not period-scoped — money you have is money you have, whichever
+ * month is selected above it.
  */
-export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
+export function BalanceCard({ summary, onPeriodPress }: BalanceCardProps) {
   const theme = useTheme();
   const [masked, setMasked] = useState(false);
 
@@ -45,22 +45,10 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
           borderWidth: theme.layout.hairline,
           borderColor: theme.colors.heroBorder,
           overflow: 'hidden',
+          padding: theme.spacing.xl,
         },
       ]}
     >
-      {/* Trend line, bled to the card edges behind the figures. Padding lives on the
-          content wrapper below so this measures against an unpadded parent. */}
-      <View style={styles.trend} pointerEvents="none">
-        <Sparkline
-          data={trend}
-          width={width}
-          height={96}
-          color={theme.colors.brand}
-          gradientId="balanceTrend"
-        />
-      </View>
-
-      <View style={{ padding: theme.spacing.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <Pressable
           onPress={() => setMasked((current) => !current)}
@@ -90,8 +78,10 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
         </Pressable>
 
         <Pressable
+          onPress={onPeriodPress}
+          disabled={!onPeriodPress}
           accessibilityRole="button"
-          accessibilityLabel={`Period, ${monthRangeLabel(summary.month)}`}
+          accessibilityLabel={`Period, ${summary.label}`}
           accessibilityHint="Changes the period this summary covers"
           hitSlop={8}
           style={{
@@ -108,9 +98,11 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
         >
           <Icon name="calendar" size={13} color={theme.colors.heroTextMuted} strokeWidth={2} />
           <Text variant="caption" color={theme.colors.heroText} numberOfLines={1}>
-            {monthRangeLabel(summary.month)}
+            {summary.label}
           </Text>
-          <Icon name="chevronDown" size={13} color={theme.colors.heroTextMuted} strokeWidth={2} />
+          {onPeriodPress ? (
+            <Icon name="chevronDown" size={13} color={theme.colors.heroTextMuted} strokeWidth={2} />
+          ) : null}
         </Pressable>
       </View>
 
@@ -122,7 +114,7 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
         minimumFontScale={0.6}
         style={{ marginTop: theme.spacing.md }}
       >
-        {masked ? '\u2022\u2022\u2022\u2022\u2022\u2022' : formatINR(summary.currentBalance)}
+        {masked ? '••••••' : formatINR(summary.currentBalance)}
       </Text>
 
       {delta !== null ? (
@@ -130,7 +122,7 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
           accessible
           accessibilityLabel={`Spending ${spendingUp ? 'up' : 'down'} ${Math.abs(delta).toFixed(
             0,
-          )} percent versus last month`}
+          )} percent versus the previous period`}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: theme.spacing.sm }}
         >
           <Icon
@@ -146,7 +138,7 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
             {`${Math.abs(delta).toFixed(0)}%`}
           </Text>
           <Text variant="caption" color={theme.colors.heroTextMuted}>
-            {`Spending ${spendingUp ? 'up' : 'down'} vs last month`}
+            {`Spending ${spendingUp ? 'up' : 'down'} vs last period`}
           </Text>
         </View>
       ) : null}
@@ -159,7 +151,6 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
           icon="arrowUpRight"
           color={theme.colors.heroPositive}
           riseIsGood
-          trend={incomeTrend}
           masked={masked}
         />
         <StatTile
@@ -169,15 +160,27 @@ export function BalanceCard({ summary, trend, width }: BalanceCardProps) {
           icon="arrowDownLeft"
           color={theme.colors.heroNegative}
           riseIsGood={false}
-          trend={spendTrend}
           masked={masked}
         />
       </View>
-      </View>
+
+      {/* Transfers move money without spending it, so they sit outside the two
+          tiles entirely — visible, but never mixed into either total. */}
+      {summary.transferred > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: theme.spacing.md,
+          }}
+        >
+          <Icon name="repeat" size={12} color={theme.colors.heroTextMuted} strokeWidth={2.2} />
+          <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+            {`${masked ? '••••' : formatINR(summary.transferred)} moved between your accounts`}
+          </Text>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  trend: { position: 'absolute', left: 0, right: 0, top: 78 },
-});

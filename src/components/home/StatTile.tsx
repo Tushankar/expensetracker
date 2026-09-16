@@ -1,6 +1,5 @@
 import { View } from 'react-native';
 
-import { BarChart } from '@/components/charts';
 import { Icon, Text, withAlpha, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { Paise } from '@/types/models';
@@ -11,15 +10,13 @@ export type StatTileProps = {
   amount: Paise;
   previous: Paise;
   icon: IconName;
-  /** Accent for the glyph, the delta and the thumbnail bars. */
+  /** Accent for the glyph and the delta. */
   color: string;
   /**
    * Whether a rise is good news. Income up is positive, spending up is not — the
    * delta's colour follows this, not the direction of the arrow.
    */
   riseIsGood: boolean;
-  /** Shape-only series for the thumbnail chart. */
-  trend: readonly number[];
   /** Hides the figures behind dots when the balance is masked. */
   masked?: boolean;
 };
@@ -38,7 +35,6 @@ export function StatTile({
   icon,
   color,
   riseIsGood,
-  trend,
   masked = false,
 }: StatTileProps) {
   const theme = useTheme();
@@ -49,8 +45,7 @@ export function StatTile({
   // Hero-scoped: this tile sits on the dark slab in both themes.
   const deltaColor = good ? theme.colors.heroPositive : theme.colors.heroNegative;
 
-  const deltaText =
-    delta === null ? null : `${rose ? '↑' : '↓'} ${Math.abs(delta).toFixed(0)}%`;
+  const deltaText = delta === null ? null : `${rose ? '↑' : '↓'} ${Math.abs(delta).toFixed(0)}%`;
 
   return (
     <View
@@ -58,74 +53,68 @@ export function StatTile({
       accessibilityLabel={
         delta === null
           ? `${label}, ${formatINR(amount)}`
-          : `${label}, ${formatINR(amount)}, ${rose ? 'up' : 'down'} ${Math.abs(delta).toFixed(
-              0,
-            )} percent versus last month`
+          : `${label}, ${formatINR(amount)}, ${Math.abs(delta).toFixed(0)} percent ${
+              rose ? 'up' : 'down'
+            } on last month`
       }
       style={{
         flex: 1,
         minWidth: 0,
-        backgroundColor: theme.colors.heroTile,
+        gap: 6,
+        padding: theme.spacing.md,
         borderRadius: theme.radius.md,
+        backgroundColor: theme.colors.heroTile,
         borderWidth: theme.layout.hairline,
         borderColor: theme.colors.heroTileBorder,
-        padding: theme.spacing.lg - 2,
-        gap: theme.spacing.sm,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <View
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: withAlpha(color, 0.16),
+            backgroundColor: withAlpha(color, 0.18),
           }}
         >
-          <Icon name={icon} size={15} color={color} strokeWidth={2.4} />
+          <Icon name={icon} size={12} color={color} strokeWidth={2.4} />
         </View>
-
-        <View style={{ flex: 1 }} />
-
-        {/* Fixed width: the bars inside are flex children and would collapse to
-            zero in an auto-sized box. */}
-        <View style={{ width: 42 }}>
-          <BarChart
-            data={trend.map((value, index) => ({ label: `b${index}`, value }))}
-            color={color}
-            height={22}
-            gap={3}
-            barRadius={2}
-            showLabels={false}
-            accessibilityLabel=""
-          />
-        </View>
+        <Text
+          variant="caption"
+          color={theme.colors.heroTextMuted}
+          numberOfLines={1}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {label}
+        </Text>
       </View>
 
-      <Text variant="caption" color={theme.colors.heroTextMuted}>
-        {label}
-      </Text>
-
       <Text
-        variant="amount"
+        variant="amountSm"
         color={theme.colors.heroText}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.7}
+        minimumFontScale={0.75}
       >
-        {masked ? '•••••' : formatINR(amount)}
+        {masked ? '••••••' : formatINR(amount)}
       </Text>
 
-      {deltaText ? (
+      {deltaText && !masked ? (
         <Text variant="caption" color={deltaColor} numberOfLines={1}>
           {`${deltaText} `}
           <Text variant="caption" color={theme.colors.heroTextMuted}>
-            vs last month
+            vs last
           </Text>
         </Text>
-      ) : null}
+      ) : (
+        // Holds the row's height so the two tiles stay level whether or not there
+        // is a previous period to compare against.
+        <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+          {masked ? ' ' : 'no comparison yet'}
+        </Text>
+      )}
     </View>
   );
 }

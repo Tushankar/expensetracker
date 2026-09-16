@@ -195,8 +195,8 @@ export type CategoryHue = keyof typeof categoryHues;
 export const actionHues: Record<string, { fill: string; glyph: 'dark' | 'light' }> = {
   expense: { fill: '#7856F0', glyph: 'light' },
   income: { fill: '#12905A', glyph: 'light' },
-  budget: { fill: '#FFB020', glyph: 'dark' },
-  reports: { fill: '#4C8DFF', glyph: 'light' },
+  transfer: { fill: '#FFB020', glyph: 'dark' },
+  accounts: { fill: '#4C8DFF', glyph: 'light' },
 };
 
 export type ActionHue = keyof typeof actionHues;

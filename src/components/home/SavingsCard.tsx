@@ -3,11 +3,11 @@ import { Pressable, View } from 'react-native';
 import { ProgressRing } from '@/components/charts';
 import { Card, Icon, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
-import type { MonthSummary } from '@/types/models';
+import type { PeriodSummary } from '@/types/models';
 import { formatINR } from '@/utils/currency';
 
 export type SavingsCardProps = {
-  summary: MonthSummary;
+  summary: PeriodSummary;
   onPress?: () => void;
 };
 
@@ -19,6 +19,8 @@ export type SavingsCardProps = {
 export function SavingsCard({ summary, onPress }: SavingsCardProps) {
   const theme = useTheme();
 
+  // Savings rate, not a savings figure: ₹71,773 means little on its own, and
+  // "46% of what you earned" is the number someone can act on.
   const rate = summary.income > 0 ? summary.saved / summary.income : 0;
   const overspent = summary.saved < 0;
   const percent = Math.round(Math.abs(rate) * 100);
@@ -44,7 +46,7 @@ export function SavingsCard({ summary, onPress }: SavingsCardProps) {
               <Icon name="rupee" size={13} color={accent} strokeWidth={2.2} />
             </View>
             <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ flex: 1 }}>
-              {overspent ? 'You overspent this month' : 'You saved this month'}
+              {overspent ? 'You overspent this period' : 'You saved this period'}
             </Text>
           </View>
 

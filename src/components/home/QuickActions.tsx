@@ -25,8 +25,8 @@ type Action = {
 const ACTIONS: readonly Action[] = [
   { key: 'expense', label: 'Add Expense', icon: 'plus', hint: 'Records money out' },
   { key: 'income', label: 'Add Income', icon: 'arrowUpRight', hint: 'Records money in' },
-  { key: 'budget', label: 'Set Budget', icon: 'target', hint: 'Sets a monthly cap' },
-  { key: 'reports', label: 'View Reports', icon: 'barChart', hint: 'Opens spending reports' },
+  { key: 'transfer', label: 'Transfer', icon: 'repeat', hint: 'Moves money between your accounts' },
+  { key: 'accounts', label: 'Accounts', icon: 'wallet', hint: 'Opens your accounts' },
 ];
 
 export type QuickActionsProps = {
