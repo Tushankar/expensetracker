@@ -1,7 +1,14 @@
 import { request, requestData } from './client';
 import type {
   Account,
+  AiAnswer,
+  AiChatMessage,
+  AiInsight,
+  AiSummary,
+  AnalyticsBucket,
+  AnalyticsOverview,
   AppNotification,
+  CategorySuggestion,
   AuthSession,
   BudgetProgress,
   BudgetSummary,
@@ -316,5 +323,80 @@ export const notificationApi = {
       method: 'POST',
       body: { token },
     });
+  },
+};
+
+
+// ------------------------------------------------------------------- analytics
+
+export const analyticsApi = {
+  overview(range: { from: string; to: string; previousFrom?: string; previousTo?: string; label?: string }) {
+    return requestData<{ overview: AnalyticsOverview }>('/analytics/overview', {
+      params: range,
+    }).then((data) => data.overview);
+  },
+
+  trend(months = 6) {
+    return requestData<{ months: AnalyticsBucket[] }>('/analytics/trend', {
+      params: { months },
+    }).then((data) => data.months);
+  },
+};
+
+// -------------------------------------------------------------------------- ai
+
+export const aiApi = {
+  /** Whether the assistant is configured, so the app can explain rather than fail. */
+  status() {
+    return requestData<{ available: boolean; model: string | null }>('/ai/status');
+  },
+
+  /** Summary and insight cards together — both written from one set of figures. */
+  summary(range: {
+    from: string;
+    to: string;
+    previousFrom?: string;
+    previousTo?: string;
+    label?: string;
+  }) {
+    return requestData<{ summary: AiSummary; insights: AiInsight[] }>('/ai/summary', {
+      params: range,
+    });
+  },
+
+  ask(input: {
+    question: string;
+    from: string;
+    to: string;
+    previousFrom?: string;
+    previousTo?: string;
+    label?: string;
+  }) {
+    return requestData<{ answer: AiAnswer }>('/ai/ask', { method: 'POST', body: input }).then(
+      (data) => data.answer,
+    );
+  },
+
+  chat(limit = 50) {
+    return requestData<{ messages: AiChatMessage[] }>('/ai/chat', { params: { limit } }).then(
+      (data) => data.messages,
+    );
+  },
+
+  clearChat() {
+    return requestData<{ deleted: number }>('/ai/chat', { method: 'DELETE' });
+  },
+
+  /** Suggests a category. Writes nothing — the user always chooses. */
+  categorise(input: {
+    merchant: string;
+    description?: string;
+    amount?: number;
+    type?: 'expense' | 'income';
+  }) {
+    return requestData<{ suggestion: CategorySuggestion }>('/ai/categorise', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.suggestion);
   },
 };

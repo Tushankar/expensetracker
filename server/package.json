@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/scripts/seed.ts",
     "test:api": "tsx src/scripts/apitest.ts",
-    "test:step": "tsx src/scripts/steptest.ts"
+    "test:step": "tsx src/scripts/steptest.ts",
+    "test:ai": "tsx src/scripts/aitest.ts"
   },
   "dependencies": {
     "@types/luxon": "^3.7.5",

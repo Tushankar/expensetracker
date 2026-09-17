@@ -13,7 +13,7 @@
     "verify": "tsx --tsconfig scripts/tsconfig.json scripts/verify.ts && tsx --tsconfig scripts/tsconfig.json scripts/client.test.ts",
     "server": "npm --prefix server run dev",
     "server:seed": "npm --prefix server run seed",
-    "server:test": "npm --prefix server run test:api && npm --prefix server run test:step",
+    "server:test": "npm --prefix server run test:api && npm --prefix server run test:step && npm --prefix server run test:ai",
     "verify:e2e": "tsx --tsconfig scripts/tsconfig.json scripts/e2e.test.ts"
   },
   "dependencies": {

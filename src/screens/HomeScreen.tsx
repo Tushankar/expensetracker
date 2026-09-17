@@ -32,6 +32,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { categoryColor, useTheme, type ActionHue } from '@/theme';
 import type { CategorySlice, PeriodSummary } from '@/types/models';
+import { toBreakdown } from '@/utils/breakdown';
 import { monthLabel } from '@/utils/date';
 import { dayFromKey, periodRange, type Period, type PeriodSelection } from '@/utils/period';
 
@@ -40,13 +41,6 @@ const RECENT_COUNT = 5;
 
 /** Lines a divider up with the row text rather than its icon tile. */
 const DIVIDER_INSET = 44 + 12;
-
-/**
- * The five bands the spending donut names; everything else folds into "Others".
- * A fixed count reads the same way month to month, which a top-N-that-varies
- * list would not.
- */
-const HEADLINE_SLICES = 5;
 
 /**
  * Home: the dashboard.
@@ -118,34 +112,21 @@ export function HomeScreen() {
     : null;
 
   const breakdown: CategorySlice[] = useMemo(() => {
-    if (!summary || summary.expense === 0) return [];
+    if (!summary) return [];
 
-    const slices = summary.byCategory.map((entry) => {
-      const category: Category | undefined = categories.get(entry.categoryId);
-      return {
-        key: entry.categoryId,
-        label: category?.name ?? 'Uncategorised',
-        color: categoryColor(category?.color ?? 'other'),
-        amount: entry.amount,
-        share: entry.amount / summary.expense,
-      };
-    });
-
-    const headline = slices.slice(0, HEADLINE_SLICES);
-    const rest = slices.slice(HEADLINE_SLICES);
-    if (rest.length === 0) return headline;
-
-    const othersAmount = rest.reduce((total, slice) => total + slice.amount, 0);
-    return [
-      ...headline,
-      {
-        key: 'others',
-        label: 'Others',
-        color: categoryColor('other'),
-        amount: othersAmount,
-        share: othersAmount / summary.expense,
-      },
-    ];
+    return toBreakdown(
+      summary.expense,
+      summary.byCategory.map((entry) => {
+        const category: Category | undefined = categories.get(entry.categoryId);
+        return {
+          key: entry.categoryId,
+          label: category?.name ?? 'Uncategorised',
+          color: categoryColor(category?.color ?? 'other'),
+          amount: entry.amount,
+        };
+      }),
+      { othersColor: categoryColor('other') },
+    );
   }, [summary, categories]);
 
   const accountMap = useMemo(
@@ -222,7 +203,7 @@ export function HomeScreen() {
             firstName={firstName}
             initials={initials || 'P'}
             unreadCount={unreadQuery.data ?? 0}
-            onProfilePress={() => navigation.navigate('Tabs', { screen: 'Settings' })}
+            onProfilePress={() => navigation.navigate('Settings')}
             onNotificationsPress={() => navigation.navigate('Notifications')}
             onSearchPress={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
           />

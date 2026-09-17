@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import {
+  getCategoriesSpend,
   getCategorySpend,
   getDayTotal,
   getOverview,
@@ -21,6 +22,7 @@ import {
   deterministicSummary,
   isLimitedData,
   rupees,
+  type FactSection,
 } from './ai.prompts';
 
 export type Range = { from: Date; to: Date };
@@ -119,7 +121,11 @@ export async function summaryFromOverview(overview: AnalyticsOverview): Promise<
     (retryNote) =>
       complete({
         temperature: 0.3,
-        maxTokens: 220,
+        // The gpt-oss models spend completion tokens thinking before they write,
+        // and that comes out of this budget. Too tight and the reply arrives
+        // empty, which reads as an outage rather than as a short summary.
+        maxTokens: 600,
+        reasoning: 'low',
         messages: [
           { role: 'system', content: SYSTEM_RULES },
           ...(limited ? [{ role: 'system' as const, content: LIMITED_DATA_NOTE }] : []),
@@ -174,8 +180,11 @@ export async function insightsFromOverview(
   try {
     raw = await complete({
       temperature: 0.3,
-      maxTokens: 500,
+      // Generous, because the reasoning tokens come out of this budget before a
+      // single character of JSON is emitted.
+      maxTokens: 1200,
       json: true,
+      reasoning: 'low',
       messages: [
         { role: 'system', content: SYSTEM_RULES },
         ...(limited ? [{ role: 'system' as const, content: LIMITED_DATA_NOTE }] : []),
@@ -292,7 +301,7 @@ export function deterministicInsights(overview: AnalyticsOverview): AiInsight[] 
 
 // -------------------------------------------------------------------- asking
 
-type Intent =
+export type Intent =
   | 'total_spend'
   | 'category_spend'
   | 'savings'
@@ -302,9 +311,33 @@ type Intent =
   | 'comparison'
   | 'budget_status'
   | 'today'
+  | 'advice'
   | 'general';
 
-type ResolvedIntent = { intent: Intent; categoryName?: string };
+export type ResolvedIntent = { intent: Intent; categoryName?: string; groupName?: string };
+
+/**
+ * Only the part of the fact sheet each question needs.
+ *
+ * Sending everything every time is both slower and more expensive — the full
+ * sheet is over a thousand tokens, and Groq meters tokens per minute, so a
+ * padded prompt is the difference between an answer and a fallback. It is also
+ * simply better prompting: a model asked "what did I spend on petrol" answers
+ * more precisely when it is not also holding five budgets and a comparison.
+ */
+const SECTIONS_FOR: Record<Intent, readonly FactSection[]> = {
+  total_spend: ['totals', 'categories', 'comparison'],
+  category_spend: ['totals'],
+  savings: ['totals', 'comparison'],
+  income: ['totals', 'comparison'],
+  largest_expenses: ['totals', 'largest'],
+  top_category: ['totals', 'categories'],
+  comparison: ['totals', 'comparison'],
+  budget_status: ['totals', 'budgets'],
+  today: ['totals'],
+  advice: ['totals'],
+  general: ['totals', 'categories', 'comparison'],
+};
 
 /**
  * Works out what was asked, without touching any numbers.
@@ -317,63 +350,130 @@ type ResolvedIntent = { intent: Intent; categoryName?: string };
  * Falls back to keywords when the model is unavailable, which handles the common
  * phrasings well enough that the assistant still answers rather than apologising.
  */
-async function resolveIntent(question: string, categoryNames: string[]): Promise<ResolvedIntent> {
-  const keyword = keywordIntent(question, categoryNames);
-  if (!isAiConfigured()) return keyword;
+async function resolveIntent(
+  question: string,
+  categoryNames: string[],
+  groupNames: string[],
+): Promise<ResolvedIntent> {
+  const keyword = keywordIntent(question, categoryNames, groupNames);
+  // An advice question is settled here and never sent for phrasing — see
+  // `answerQuestion`. Asking a model to decline gracefully is a worse guarantee
+  // than not asking it at all.
+  if (keyword.intent === 'advice' || !isAiConfigured()) return keyword;
 
   try {
     const raw = await complete({
       model: env.GROQ_FAST_MODEL,
       temperature: 0,
-      maxTokens: 200,
+      maxTokens: 400,
       json: true,
+      reasoning: 'low',
       messages: [
         {
           role: 'system',
           content: `Classify a question about personal spending. Reply with JSON only:
-{"intent":"total_spend|category_spend|savings|income|largest_expenses|top_category|comparison|budget_status|today|general","category":"exact category name from the list, or null"}
+{"intent":"total_spend|category_spend|savings|income|largest_expenses|top_category|comparison|budget_status|today|advice|general","category":"exact category name from the list, or null","group":"exact group name from the list, or null"}
 
-"category_spend" is for questions about one named category. "top_category" is for "where am I spending the most". "comparison" is for "why did I spend more" or "versus last month". "today" is for questions about today specifically.
-The category MUST be copied exactly from this list or be null:
-${categoryNames.join(', ')}`,
+- "category_spend": about one named category or group of spending.
+- "top_category": "where am I spending the most".
+- "comparison": "why did I spend more", "versus last month".
+- "today": about today specifically.
+- "advice": asking what they SHOULD do with money — investing, saving strategy, whether to buy something.
+- Prefer "group" when the question names a broad area like food, transport or shopping, and "category" when it names a specific one like Petrol or Netflix.
+
+Category MUST be copied exactly from this list, or null:
+${categoryNames.join(', ')}
+
+Group MUST be copied exactly from this list, or null:
+${groupNames.join(', ')}`,
         },
         { role: 'user', content: question.slice(0, 400) },
       ],
     });
 
-    const parsed = JSON.parse(raw) as { intent?: string; category?: string | null };
+    const parsed = JSON.parse(raw) as {
+      intent?: string;
+      category?: string | null;
+      group?: string | null;
+    };
     const intent = (parsed.intent ?? 'general') as Intent;
     const category =
       typeof parsed.category === 'string' && categoryNames.includes(parsed.category)
         ? parsed.category
         : keyword.categoryName;
+    const group =
+      typeof parsed.group === 'string' && groupNames.includes(parsed.group)
+        ? parsed.group
+        : keyword.groupName;
 
-    return { intent, categoryName: category };
+    // "How much did I spend on food?" often classifies as total_spend even
+    // though it names a group. If something specific was named, the question is
+    // about that thing.
+    const narrowed: Intent =
+      (category || group) && (intent === 'total_spend' || intent === 'general')
+        ? 'category_spend'
+        : intent;
+
+    return { intent: narrowed, categoryName: category, groupName: group };
   } catch {
     return keyword;
   }
 }
 
 /** The fallback, and the reason a Groq outage does not take the feature down. */
-function keywordIntent(question: string, categoryNames: string[]): ResolvedIntent {
+export function keywordIntent(
+  question: string,
+  categoryNames: string[],
+  groupNames: string[],
+): ResolvedIntent {
   const text = question.toLowerCase();
 
-  const matched = categoryNames.find((name) => text.includes(name.toLowerCase()));
+  // Longest first, so "Mutual Fund" wins over "Fund" and "Food Delivery" over
+  // "Food".
+  const byLength = (a: string, b: string) => b.length - a.length;
+  const matched = [...categoryNames].sort(byLength).find((name) => text.includes(name.toLowerCase()));
+  const matchedGroup = [...groupNames].sort(byLength).find((name) => text.includes(name.toLowerCase()));
 
+  if (ADVICE_QUESTION.test(text)) return { intent: 'advice' };
   if (/\btoday\b/.test(text)) return { intent: 'today', categoryName: matched };
   if (matched) return { intent: 'category_spend', categoryName: matched };
+  if (matchedGroup) return { intent: 'category_spend', groupName: matchedGroup };
   if (/\b(save|saved|saving|savings)\b/.test(text)) return { intent: 'savings' };
   if (/\b(earn|earned|income|salary)\b/.test(text)) return { intent: 'income' };
   if (/\b(biggest|largest|most expensive|top expenses?)\b/.test(text)) {
     return { intent: 'largest_expenses' };
   }
-  if (/\b(most|highest|top)\b.*\b(categor|spend)/.test(text)) return { intent: 'top_category' };
+  // Both orders. "Where am I spending the most?" — one of the questions the app
+  // itself suggests — puts the superlative last, and a pattern that only read
+  // left to right sent it to the plain total instead of the top category.
+  if (
+    /\b(most|highest|top|biggest)\b/.test(text) &&
+    /\b(categor|spend|spending|spent|money)\b/.test(text)
+  ) {
+    return { intent: 'top_category' };
+  }
+  if (/\bwhere\b.*\b(money|spend|spending|going?|goes)\b/.test(text)) {
+    return { intent: 'top_category' };
+  }
   if (/\b(more|less|than last|compared|why)\b/.test(text)) return { intent: 'comparison' };
   if (/\bbudget/.test(text)) return { intent: 'budget_status' };
   if (/\b(spend|spent|spending|total)\b/.test(text)) return { intent: 'total_spend' };
 
   return { intent: 'general' };
 }
+
+/**
+ * Questions asking what to *do* with money rather than what happened to it.
+ *
+ * Answered by the server with a plain decline, never sent to the model. A model
+ * told not to give advice usually complies, and "usually" is not a standard to
+ * hold financial advice to.
+ */
+const ADVICE_QUESTION =
+  /\b(should i|shall i|is it worth|worth it to|do you recommend|what should i do|advise me|help me (invest|choose))\b/i;
+
+export const ADVICE_DECLINE =
+  'I can tell you what you have spent, earned and saved, but I cannot advise on what to do with your money — that depends on things this app does not know about you.';
 
 /**
  * Answers a question.
@@ -396,17 +496,76 @@ export async function answerQuestion(
     $or: [{ userId: null }, { userId: new Types.ObjectId(userId) }],
     isActive: true,
   })
-    .select('name')
+    .select('name group')
     .lean();
   const categoryNames = [...new Set(categories.map((entry) => entry.name))];
+  const groupNames = [...new Set(categories.map((entry) => entry.group))];
 
-  const resolved = await resolveIntent(question, categoryNames);
+  const resolved = await resolveIntent(question, categoryNames, groupNames);
 
-  let facts = buildFactSheet(overview);
+  // "How much did I spend on dinosaurs?" classifies as a category question with
+  // no category. Treated as a general one so the model answers from the overview
+  // and says it cannot see anything like that — which is the honest reply, and a
+  // better one than a summary nobody asked for.
+  if (
+    resolved.intent === 'category_spend' &&
+    !resolved.categoryName &&
+    !resolved.groupName
+  ) {
+    resolved.intent = 'general';
+  }
+
+  if (resolved.intent === 'advice') {
+    return {
+      text: `${ADVICE_DECLINE} ${deterministicSummary(overview)}`,
+      fromModel: false,
+      limitedData: limited,
+      context: { intent: 'advice', periodLabel: label },
+    };
+  }
+
+  let facts = buildFactSheet(overview, SECTIONS_FOR[resolved.intent]);
   let fallback = deterministicSummary(overview);
   const context: AiAnswer['context'] = { intent: resolved.intent, periodLabel: label };
 
   // Extra, narrower data for the intents the overview does not already cover.
+  //
+  // A group question ("how much on food?") is answered by adding up the group's
+  // categories, because that is how people think about spending — "food" is
+  // Restaurants and Swiggy and the cafe, not a category that happens to exist.
+  if (resolved.intent === 'category_spend' && !resolved.categoryName && resolved.groupName) {
+    const inGroup = categories.filter((entry) => entry.group === resolved.groupName);
+    // Aggregated over every category in the group, not read off the overview's
+    // top-eight list: a six-category group would otherwise report a fraction of
+    // itself, and quietly wrong is the worst kind of wrong for a figure someone
+    // is about to act on.
+    const { amount, count, breakdown } = await getCategoriesSpend(
+      userId,
+      inGroup.map((entry) => String(entry._id)),
+      range,
+    );
+
+    context.categoryName = resolved.groupName;
+    context.amount = amount;
+    context.count = count;
+
+    facts += `\n\nSPENDING ON ${resolved.groupName.toUpperCase()} (the whole group) IN ${label.toUpperCase()}:\n  Total: ${rupees(
+      amount,
+    )} across ${count} transactions`;
+    if (breakdown.length > 0) {
+      facts += `\n  Made up of: ${breakdown
+        .map((entry) => `${entry.name} ${rupees(entry.amount)}`)
+        .join(', ')}`;
+    }
+
+    fallback =
+      count === 0
+        ? `Nothing recorded under ${resolved.groupName} in ${label}.`
+        : `You spent ${rupees(amount)} on ${resolved.groupName} in ${label}, across ${count} ${
+            count === 1 ? 'transaction' : 'transactions'
+          }.`;
+  }
+
   if (resolved.intent === 'category_spend' && resolved.categoryName) {
     const category = categories.find((entry) => entry.name === resolved.categoryName);
     if (category) {
@@ -460,7 +619,8 @@ export async function answerQuestion(
     (retryNote) =>
       complete({
         temperature: 0.2,
-        maxTokens: 280,
+        maxTokens: 700,
+        reasoning: 'low',
         messages: [
           { role: 'system', content: SYSTEM_RULES },
           ...(limited ? [{ role: 'system' as const, content: LIMITED_DATA_NOTE }] : []),
@@ -542,8 +702,9 @@ export async function suggestCategory(
     const raw = await complete({
       model: env.GROQ_FAST_MODEL,
       temperature: 0,
-      maxTokens: 200,
+      maxTokens: 400,
       json: true,
+      reasoning: 'low',
       messages: [
         { role: 'system', content: CATEGORISE_INSTRUCTION },
         {
@@ -552,8 +713,8 @@ export async function suggestCategory(
 DESCRIPTION: ${(input.description ?? '').slice(0, 200) || '(none)'}
 AMOUNT: ${input.amount ? rupees(input.amount) : '(not given)'}
 
-CATEGORIES:
-${categories.map((entry) => `${entry.name} (${entry.group})`).join('\n')}`,
+CATEGORIES (choose one of these names exactly):
+${categories.map((entry) => entry.name).join('\n')}`,
         },
       ],
     });
@@ -564,13 +725,16 @@ ${categories.map((entry) => `${entry.name} (${entry.group})`).join('\n')}`,
       reason?: string;
     };
 
-    const name = typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '';
+    const raw_name = typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '';
+    // Tolerate the one shape it reaches for anyway — "Zomato (Food)" — rather
+    // than discarding an otherwise correct answer over punctuation.
+    const name = byName.has(raw_name) ? raw_name : raw_name.replace(/\s*\([^)]*\)\s*$/, '');
     const match = byName.get(name);
 
     // A name that is not in the list is an invention, so it is dropped rather
     // than fuzzy-matched into something that looks plausible.
     if (!match) {
-      logger.warn({ suggested: name }, 'category suggestion not in the list, discarding');
+      logger.warn({ suggested: raw_name }, 'category suggestion not in the list, discarding');
       throw new AiUnavailableError();
     }
 
@@ -651,7 +815,7 @@ const MERCHANT_HINTS: readonly [RegExp, string][] = [
   [/\b(rent)\b/i, 'Rent'],
 ];
 
-function localCategoryGuess(
+export function localCategoryGuess(
   merchant: string,
   description: string | undefined,
   available: string[],

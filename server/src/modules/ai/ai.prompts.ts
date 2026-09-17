@@ -142,7 +142,12 @@ export function buildFactSheet(
 
   if (include.has('categories')) {
     lines.push('');
-    lines.push('SPENDING BY CATEGORY (largest first):');
+    // Labelled as a top-N, because it is one. Without that the model reads the
+    // list as the complete picture and says "you spent nothing on X" about a
+    // category that simply did not make the cut.
+    lines.push(
+      `TOP ${Math.min(6, overview.topCategories.length)} SPENDING CATEGORIES (largest first; there may be others not listed):`,
+    );
     lines.push(categoryLines(overview.topCategories, 6));
 
     if (overview.highestCategory) {
@@ -311,7 +316,7 @@ You will be given a merchant name, an optional description, an amount, and the C
 Reply with JSON only:
 {"categoryName":"exact name from the list","confidence":"high|medium|low","reason":"at most 10 words"}
 
-- "categoryName" MUST be copied character-for-character from the list. Never invent one.
+- "categoryName" MUST be exactly one of the names listed under CATEGORIES, copied character-for-character. Just the name — no group, no brackets, no extra words. Never invent one.
 - Use "low" when the merchant is ambiguous or unfamiliar. Guessing confidently is worse than admitting it.
 - Indian context: Swiggy and Zomato are food delivery; IndianOil, HP and Shell are petrol; Ola, Uber and Rapido are rides; Jio and Airtel are mobile or internet; BESCOM and similar are electricity; Blinkit, Zepto and BigBasket are groceries.
 - The amount is a weak hint at best. A ₹50,000 payment to a name you do not recognise is not automatically rent.`;

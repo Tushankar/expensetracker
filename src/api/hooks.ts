@@ -11,6 +11,8 @@ import { useAuthStore } from '@/store/authStore';
 
 import {
   accountApi,
+  aiApi,
+  analyticsApi,
   authApi,
   budgetApi,
   categoryApi,
@@ -548,4 +550,130 @@ export function useTimezoneSync(): void {
       .then(({ user }) => updateUser(user))
       .catch(() => undefined);
   }, [status, storedZone, updateUser]);
+}
+
+
+// ------------------------------------------------------------------- analytics
+
+export function useAnalytics(range: {
+  from: string;
+  to: string;
+  previousFrom?: string;
+  previousTo?: string;
+  label?: string;
+}) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.analytics(range),
+    enabled: status === 'signedIn',
+    queryFn: () => analyticsApi.overview(range),
+  });
+}
+
+export function useMonthlyTrend(months = 6) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.trend(months),
+    enabled: status === 'signedIn',
+    staleTime: 5 * 60_000,
+    queryFn: () => analyticsApi.trend(months),
+  });
+}
+
+// -------------------------------------------------------------------------- ai
+
+export function useAiStatus() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.aiStatus,
+    enabled: status === 'signedIn',
+    // Configuration does not change while the app is open.
+    staleTime: Infinity,
+    queryFn: () => aiApi.status(),
+  });
+}
+
+/**
+ * The summary and insight cards.
+ *
+ * A longer `staleTime` than the rest of the app on purpose: every refetch is a
+ * Groq call, and re-narrating the same figures because someone switched tabs is
+ * a cost with no benefit. The numbers underneath come from the analytics query,
+ * which refreshes normally.
+ */
+export function useAiSummary(range: {
+  from: string;
+  to: string;
+  previousFrom?: string;
+  previousTo?: string;
+  label?: string;
+}) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.aiSummary(range),
+    enabled: status === 'signedIn',
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    queryFn: () => aiApi.summary(range),
+  });
+}
+
+export function useAiChat() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.aiChat,
+    enabled: status === 'signedIn',
+    queryFn: () => aiApi.chat(),
+  });
+}
+
+export function useAskAi() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      question: string;
+      from: string;
+      to: string;
+      previousFrom?: string;
+      previousTo?: string;
+      label?: string;
+    }) => aiApi.ask(input),
+    // The server writes both turns to the transcript, so the history is the
+    // source of truth rather than whatever the screen happens to be holding.
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.aiChat }),
+  });
+}
+
+export function useClearAiChat() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => aiApi.clearChat(),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.aiChat }),
+  });
+}
+
+/**
+ * Asks for a category suggestion.
+ *
+ * A mutation rather than a query because it is a side-effect-free request the
+ * user triggers, not state the screen subscribes to — and because nothing should
+ * fire it automatically on every keystroke of a merchant field.
+ */
+export function useSuggestCategory() {
+  return useMutation({
+    mutationFn: (input: {
+      merchant: string;
+      description?: string;
+      amount?: number;
+      type?: 'expense' | 'income';
+    }) => aiApi.categorise(input),
+  });
 }

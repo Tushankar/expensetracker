@@ -473,12 +473,15 @@ function toBudgetStatus(summary: BudgetSummary): BudgetStatus {
     onTrack: all.filter((budget) => budget.state === 'on_track').length,
     warning: all.filter((budget) => budget.state === 'warning').length,
     exceeded: all.filter((budget) => budget.state === 'exceeded').length,
-    exceededNames: summary.categories
+    // The overall budget counts toward the tallies above, so it has to be
+    // nameable too — without it, "1 over budget" came with an empty list and the
+    // insight card read "  went past the cap".
+    exceededNames: all
       .filter((budget) => budget.state === 'exceeded')
-      .map((budget) => budget.categoryName ?? 'A category'),
-    warningNames: summary.categories
+      .map((budget) => budget.categoryName ?? 'Your monthly budget'),
+    warningNames: all
       .filter((budget) => budget.state === 'warning')
-      .map((budget) => budget.categoryName ?? 'A category'),
+      .map((budget) => budget.categoryName ?? 'Your monthly budget'),
   };
 }
 
@@ -594,6 +597,57 @@ export async function getCategorySpend(
       merchant: row.merchant || 'Expense',
       categoryName: null,
       date: row.date.toISOString(),
+    })),
+  };
+}
+
+/**
+ * Spending across a set of categories — a whole group, say.
+ *
+ * Aggregated rather than summed from `topCategories`, which is truncated for
+ * display: a Food group of six categories against a top-eight list would quietly
+ * report a fraction of the real total, and quietly wrong is the worst kind of
+ * wrong for a number someone is about to act on.
+ */
+export async function getCategoriesSpend(
+  userId: string,
+  categoryIds: string[],
+  range: Range,
+): Promise<{ amount: number; count: number; breakdown: { name: string; amount: number }[] }> {
+  if (categoryIds.length === 0) return { amount: 0, count: 0, breakdown: [] };
+
+  const ids = categoryIds.map((id) => new Types.ObjectId(id));
+
+  const rows = await TransactionModel.aggregate<{
+    _id: Types.ObjectId;
+    amount: number;
+    count: number;
+  }>([
+    {
+      $match: {
+        userId: new Types.ObjectId(userId),
+        type: 'expense',
+        categoryId: { $in: ids },
+        date: { $gte: range.from, $lte: range.to },
+      },
+    },
+    { $group: { _id: '$categoryId', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    { $sort: { amount: -1 } },
+  ]);
+
+  const docs = await TransactionModel.db
+    .collection('categories')
+    .find({ _id: { $in: rows.map((row) => row._id) } })
+    .project({ name: 1 })
+    .toArray();
+  const names = new Map(docs.map((doc) => [String(doc._id), String(doc.name)]));
+
+  return {
+    amount: rows.reduce((sum, row) => sum + row.amount, 0),
+    count: rows.reduce((sum, row) => sum + row.count, 0),
+    breakdown: rows.map((row) => ({
+      name: names.get(String(row._id)) ?? 'Uncategorised',
+      amount: row.amount,
     })),
   };
 }

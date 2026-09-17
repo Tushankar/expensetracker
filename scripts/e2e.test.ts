@@ -678,6 +678,158 @@ async function main(): Promise<void> {
     assert.equal(typeof user.notificationPrefs.budgetAlerts, 'boolean');
   });
 
+  // ------------------------------------------------- insights and the assistant
+  section('Insights and the assistant');
+
+  await test('the overview agrees with the summary the dashboard already shows', async () => {
+    const { analyticsApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const [overview, summary] = await Promise.all([
+      analyticsApi.overview({
+        from: range.from,
+        to: range.to,
+        previousFrom: range.previousFrom,
+        previousTo: range.previousTo,
+        label: range.label,
+      }),
+      transactionApi.summary({ from: range.from, to: range.to }),
+    ]);
+
+    // Two aggregations over the same month. If they ever disagree, one screen is
+    // lying to the user and there is no way to tell which from inside the app.
+    assert.equal(overview.totalExpenses, summary.expense);
+    assert.equal(overview.totalIncome, summary.income);
+    assert.equal(overview.savings, summary.net);
+    assert.equal(overview.transferred, summary.transferred, 'transfers were counted as spending');
+  });
+
+  await test('every derived figure is computed server-side, not left to the app', async () => {
+    const { analyticsApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+    const overview = await analyticsApi.overview({ from: range.from, to: range.to });
+
+    assert.equal(overview.savings, overview.totalIncome - overview.totalExpenses);
+    assert.equal(
+      overview.averageDailySpend,
+      Math.round(overview.totalExpenses / overview.period.elapsedDays),
+      'the daily average was not divided by the days that have elapsed',
+    );
+    assert.ok(overview.savingsRate === null || overview.savingsRate <= 100);
+    assert.ok(
+      overview.topCategories.every((entry) => entry.share >= 0 && entry.share <= 100),
+      'a category share is outside 0–100',
+    );
+  });
+
+  await test('the trend has one bucket per month, oldest first, none skipped', async () => {
+    const { analyticsApi } = await import('../src/api/endpoints');
+    const months = await analyticsApi.trend(6);
+
+    assert.equal(months.length, 6);
+    assert.deepEqual(
+      months.map((bucket) => bucket.key),
+      [...months.map((bucket) => bucket.key)].sort(),
+      'the chart would draw the months out of order',
+    );
+    assert.equal(months[months.length - 1]?.key, monthKeyOf(new Date()));
+  });
+
+  await test('the assistant answers, and says whether a model wrote it', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const { summary, insights } = await aiApi.summary({
+      from: range.from,
+      to: range.to,
+      previousFrom: range.previousFrom,
+      previousTo: range.previousTo,
+      label: range.label,
+    });
+
+    assert.ok(summary.text.length > 0, 'an empty summary card');
+    assert.equal(typeof summary.fromModel, 'boolean', 'the app cannot tell who wrote this');
+    assert.equal(typeof summary.limitedData, 'boolean');
+    assert.ok(Array.isArray(insights));
+
+    for (const insight of insights) {
+      assert.ok(['neutral', 'positive', 'warning'].includes(insight.tone), insight.tone);
+      assert.ok(insight.title.length > 0 && insight.body.length > 0);
+    }
+  });
+
+  await test('a question comes back with the figures it was answered from', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const answer = await aiApi.ask({
+      question: 'How much did I spend?',
+      from: range.from,
+      to: range.to,
+      label: range.label,
+    });
+
+    assert.ok(answer.text.length > 0);
+    // The context is what lets the chat show its working rather than asking to be
+    // believed. Without it the answer is indistinguishable from a guess.
+    assert.ok(answer.context.intent.length > 0);
+    assert.equal(answer.context.periodLabel, range.label);
+  });
+
+  await test('the app is told when the assistant declines to advise', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const answer = await aiApi.ask({
+      question: 'Should I invest my savings?',
+      from: range.from,
+      to: range.to,
+    });
+
+    assert.equal(answer.context.intent, 'advice');
+    assert.equal(answer.fromModel, false, 'an advice question reached the model');
+  });
+
+  await test('the transcript round-trips and can be cleared', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+
+    const before = await aiApi.chat();
+    assert.ok(before.length >= 2, 'the conversation was not recorded');
+    assert.ok(before.every((message) => message.id && message.createdAt));
+
+    await aiApi.clearChat();
+    assert.equal((await aiApi.chat()).length, 0);
+  });
+
+  await test('a category suggestion resolves to a category the picker can show', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+
+    const suggestion = await aiApi.categorise({
+      merchant: 'Swiggy',
+      amount: rupees(420),
+      type: 'expense',
+    });
+
+    assert.ok(['high', 'medium', 'low'].includes(suggestion.confidence));
+    if (suggestion.categoryId) {
+      const { categories } = await categoryApi.list();
+      const match = categories.find((entry) => entry.id === suggestion.categoryId);
+      assert.ok(match, 'the sheet would pre-select a category that does not exist');
+      assert.equal(suggestion.categoryName, match.name);
+    }
+  });
+
+  await test('a suggestion changes nothing until the user accepts it', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const before = await transactionApi.summary({ from: range.from, to: range.to });
+    await aiApi.categorise({ merchant: 'Zomato', amount: rupees(999), type: 'expense' });
+    const after = await transactionApi.summary({ from: range.from, to: range.to });
+
+    assert.equal(after.expense, before.expense, 'asking for a suggestion recorded a transaction');
+  });
+
   // ----------------------------------------------------------------- offline
   section('Network failure');
 

@@ -1,6 +1,14 @@
 export { API_BASE_URL } from './config';
 export { request, requestData, type ApiResult, type RequestOptions } from './client';
-export { accountApi, authApi, categoryApi, transactionApi, userApi } from './endpoints';
+export {
+  accountApi,
+  aiApi,
+  analyticsApi,
+  authApi,
+  categoryApi,
+  transactionApi,
+  userApi,
+} from './endpoints';
 export {
   ApiError,
   NetworkError,

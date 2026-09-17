@@ -6,7 +6,9 @@ import { AccountsScreen } from '@/screens/AccountsScreen';
 import { AuthScreen } from '@/screens/AuthScreen';
 import { BudgetsScreen } from '@/screens/BudgetsScreen';
 import { DesignSystemScreen } from '@/screens/DesignSystemScreen';
+import { AiChatScreen } from '@/screens/AiChatScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { InsightsScreen } from '@/screens/InsightsScreen';
 import { NotificationsScreen } from '@/screens/NotificationsScreen';
 import { RecurringFormScreen } from '@/screens/RecurringFormScreen';
 import { RecurringScreen } from '@/screens/RecurringScreen';
@@ -27,10 +29,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  * Four destinations, chosen by how often they are opened rather than by how much
  * work went into them.
  *
- * Home, Activity and Budgets are the daily loop. Accounts, Recurring and Alerts
- * are setup and review — reached from Home and from Settings, where someone goes
- * once a week rather than five times a day. A fifth tab would make every one of
- * them narrower to serve a screen nobody opens twice a day.
+ * Home, Activity, Insights and Budgets are the daily loop. Settings, Accounts,
+ * Recurring and Alerts are setup and review — reached from the avatar on Home,
+ * where someone goes once a week rather than five times a day. A fifth tab would
+ * make every one of them narrower to serve a screen nobody opens twice a day.
  */
 function MainTabs() {
   const openAddSheet = useUiStore((state) => state.openAddSheet);
@@ -47,8 +49,8 @@ function MainTabs() {
         component={TransactionsScreen}
         options={{ title: 'Activity' }}
       />
+      <Tab.Screen name="Insights" component={InsightsScreen} options={{ title: 'Insights' }} />
       <Tab.Screen name="Budgets" component={BudgetsScreen} options={{ title: 'Budgets' }} />
-      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
     </Tab.Navigator>
   );
 }
@@ -116,6 +118,13 @@ export function RootNavigator() {
             component={NotificationsScreen}
             options={{ headerShown: true, title: 'Alerts' }}
           />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{ headerShown: true, title: 'Settings' }}
+          />
+          {/* Its own header, so the composer can sit against the keyboard. */}
+          <Stack.Screen name="AiChat" component={AiChatScreen} />
           <Stack.Screen
             name="DesignSystem"
             component={DesignSystemScreen}

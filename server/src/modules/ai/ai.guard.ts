@@ -107,7 +107,11 @@ export async function verify(
 
   try {
     reply = await generate();
-  } catch {
+  } catch (error) {
+    // Logged rather than swallowed: a silent fall back to the computed wording
+    // looks identical to a working assistant from the outside, which makes an
+    // outage invisible until someone notices the prose never changes.
+    logger.warn({ ...context, err: error }, 'assistant unavailable, using the computed summary');
     return { text: fallback, fromModel: false, limitedData: false };
   }
 

@@ -6,6 +6,7 @@ import {
   useAccounts,
   useCategories,
   useCreateTransaction,
+  useSuggestCategory,
   useUpdateTransaction,
   type Account,
   type Category,
@@ -16,6 +17,7 @@ import {
 import { PAYMENT_METHOD_LABEL } from '@/api/types';
 import { toIconName } from '@/components/icons/registry';
 import {
+  Badge,
   BottomSheet,
   Button,
   Icon,
@@ -24,6 +26,7 @@ import {
   Keypad,
   LoadingState,
   SegmentedControl,
+  Spinner,
   Text,
   type SegmentOption,
 } from '@/components/ui';
@@ -133,6 +136,7 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
 
   const createMutation = useCreateTransaction();
   const updateMutation = useUpdateTransaction();
+  const suggestion = useSuggestCategory();
   const saving = createMutation.isPending || updateMutation.isPending;
 
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
@@ -179,6 +183,20 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
   const destination = accounts.find((entry) => entry.id === destinationId);
   const category = categories.find((entry) => entry.id === categoryId);
 
+  /**
+   * The proposal, but only while it still refers to what is on screen.
+   *
+   * Checked against the current merchant text and resolved against the loaded
+   * category list, so a suggestion can never name a category this user does not
+   * have, and never lingers after the field it was about has changed. If it
+   * already matches what is selected there is nothing to offer.
+   */
+  const proposed =
+    suggestion.data?.categoryId && suggestion.variables?.merchant === merchant.trim()
+      ? categories.find((entry) => entry.id === suggestion.data?.categoryId)
+      : undefined;
+  const showProposal = Boolean(proposed) && proposed?.id !== categoryId;
+
   const handleClose = useCallback(() => {
     close();
     createMutation.reset();
@@ -195,7 +213,33 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
     // A category belongs to one side of the ledger, so it cannot survive the
     // switch. Clearing the pick lets the default resolve against the new list.
     setCategoryPick(undefined);
+    suggestion.reset();
     setError(undefined);
+  }
+
+  /**
+   * Asks what this merchant probably is — once, when the field is finished with.
+   *
+   * On blur rather than on change: a request per keystroke would be eleven calls
+   * to type "Indian Oil", and the answer is only useful once the name is whole.
+   * It also never fires twice for the same text, so tabbing back and forth costs
+   * nothing.
+   *
+   * The result is a proposal. Nothing is selected until the user taps Use, which
+   * is the whole point — a category quietly changed underneath someone is a
+   * mistake they find six weeks later in a chart.
+   */
+  function requestSuggestion() {
+    const name = merchant.trim();
+    if (type === 'transfer' || name.length < 3) return;
+    if (suggestion.isPending || suggestion.variables?.merchant === name) return;
+
+    suggestion.mutate({
+      merchant: name,
+      description: note.trim() || undefined,
+      amount: paise > 0 ? paise : undefined,
+      type: type === 'income' ? 'income' : 'expense',
+    });
   }
 
   const paise = rupeesToPaise(amount);
@@ -444,9 +488,34 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             placeholder={type === 'income' ? 'Salary, freelance…' : 'Swiggy, Indian Oil…'}
             value={merchant}
             onChangeText={setMerchant}
+            onBlur={requestSuggestion}
             returnKeyType="next"
             maxLength={120}
           />
+
+          {suggestion.isPending ? (
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
+              accessibilityLiveRegion="polite"
+            >
+              <Spinner />
+              <Text variant="caption" tone="tertiary">
+                Working out a category…
+              </Text>
+            </View>
+          ) : showProposal && proposed ? (
+            <CategoryProposal
+              category={proposed}
+              confidence={suggestion.data?.confidence ?? 'low'}
+              reason={suggestion.data?.reason ?? ''}
+              onUse={() => {
+                tapFeedback();
+                setCategoryPick(proposed.id);
+                suggestion.reset();
+              }}
+              onDismiss={() => suggestion.reset()}
+            />
+          ) : null}
           <Input
             label="Note"
             placeholder="Optional"
@@ -486,6 +555,79 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
         style={{ marginTop: theme.spacing.md }}
       />
     </BottomSheet>
+  );
+}
+
+type CategoryProposalProps = {
+  category: Category;
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+  onUse: () => void;
+  onDismiss: () => void;
+};
+
+/**
+ * A suggested category, offered rather than applied.
+ *
+ * It states what it thinks, how sure it is and why, and then waits. Nothing is
+ * filed until "Use" is tapped, and the reason is on screen so a wrong guess is
+ * obvious before it is accepted instead of after. Low confidence is labelled as
+ * such rather than hidden — an assistant that sounds equally certain about
+ * "Swiggy" and "NEFT/Ref 88213" teaches people to stop reading it.
+ */
+function CategoryProposal({
+  category,
+  confidence,
+  reason,
+  onUse,
+  onDismiss,
+}: CategoryProposalProps) {
+  const theme = useTheme();
+  const tint = categoryColor(category.color);
+
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={{
+        gap: theme.spacing.sm,
+        padding: theme.spacing.md,
+        borderRadius: theme.radius.md,
+        borderWidth: theme.layout.hairline,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surfaceMuted,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+        <Icon name="sparkles" size={15} color={theme.colors.brandText} strokeWidth={2} />
+        <Text variant="caption" tone="tertiary" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
+          Suggested category
+        </Text>
+        {confidence === 'low' ? <Badge label="Not sure" tone="warning" /> : null}
+        <Pressable
+          onPress={onDismiss}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss suggestion"
+        >
+          <Icon name="close" size={15} color={theme.colors.textTertiary} />
+        </Pressable>
+      </View>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+        <IconTile name={toIconName(category.icon)} color={tint} size="sm" />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="labelSm" numberOfLines={1}>
+            {category.name}
+          </Text>
+          {reason ? (
+            <Text variant="caption" tone="tertiary" numberOfLines={2}>
+              {reason}
+            </Text>
+          ) : null}
+        </View>
+        <Button label="Use" variant="tonal" size="sm" onPress={onUse} haptic={false} />
+      </View>
+    </View>
   );
 }
 

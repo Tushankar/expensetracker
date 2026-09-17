@@ -1,8 +1,8 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Fragment, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   API_BASE_URL,
@@ -18,7 +18,6 @@ import {
   Icon,
   IconTile,
   ListRow,
-  PageHeader,
   Screen,
   SectionHeader,
   Text,
@@ -42,7 +41,7 @@ import { tapFeedback } from '@/utils/haptics';
 export function SettingsScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const accent = useAccentStore((state) => state.accent);
   const setAccent = useAccentStore((state) => state.setAccent);
@@ -86,9 +85,15 @@ export function SettingsScreen() {
 
   return (
     <>
-      <Screen bottomInset={tabBarHeight + theme.spacing.xxl} testID="settings-screen">
-        <PageHeader title="Settings" />
-
+      <Screen
+        // Reached from the stack now rather than a tab, so the bottom room it
+        // needs is the home indicator's, not a tab bar's. The native header
+        // already handles the top inset and carries the title.
+        topInset={false}
+        bottomInset={insets.bottom + theme.spacing.xxl}
+        contentContainerStyle={{ paddingTop: theme.spacing.lg }}
+        testID="settings-screen"
+      >
         <Card padding="xl" radius="xl">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
             <View

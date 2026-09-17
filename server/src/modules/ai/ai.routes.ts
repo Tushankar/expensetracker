@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Types } from 'mongoose';
 
 import { env } from '../../config/env';
@@ -45,7 +45,10 @@ const aiLimiter = rateLimit({
   limit: env.AI_RATE_LIMIT_MAX,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => req.user?.id ?? (req.ip ?? 'unknown'),
+  // `ipKeyGenerator` collapses an IPv6 address to its /64 prefix. The fallback is
+  // only reachable if `requireAuth` somehow let a request through unauthenticated,
+  // but a raw `req.ip` there would hand one caller billions of usable keys.
+  keyGenerator: (req) => req.user?.id ?? ipKeyGenerator(req.ip ?? 'unknown'),
   handler: (_req, res, _next, options) => {
     res.status(options.statusCode).json({
       success: false,

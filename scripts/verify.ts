@@ -12,6 +12,8 @@ import {
 } from '../src/utils/currency';
 import { formatDayLabel, formatTime, groupByDay, monthRangeLabel } from '../src/utils/date';
 import { dayKeyOf, dayFromKey, monthKeyOf, periodRange } from '../src/utils/period';
+import { toBreakdown } from '../src/utils/breakdown';
+import { SUGGESTED_QUESTIONS } from '../src/api/types';
 
 /**
  * Unit checks for the pure logic behind the screens.
@@ -416,6 +418,82 @@ test('a day key is the local day, not the UTC one', () => {
   const lateNight = new Date(2026, 8, 30, 23, 45);
   assert.equal(dayKeyOf(lateNight), '2026-09-30');
   assert.equal(monthKeyOf(lateNight), '2026-09');
+});
+
+// ------------------------------------------------------------------ breakdown
+section('Spending breakdown');
+
+const slice = (key: string, amount: number) => ({ key, label: key, color: '#888', amount });
+const options = { othersColor: '#ccc' };
+
+test('shares are fractions of the period total', () => {
+  const slices = toBreakdown(1000, [slice('a', 600), slice('b', 400)], options);
+  assert.equal(slices.length, 2);
+  assert.equal(slices[0]?.share, 0.6);
+  assert.equal(slices[1]?.share, 0.4);
+});
+
+test('everything past the headline count folds into one Others band', () => {
+  const slices = toBreakdown(
+    2100,
+    [600, 500, 400, 300, 200, 100].map((amount, index) => slice(`c${index}`, amount)),
+    options,
+  );
+
+  assert.equal(slices.length, 6, 'the chart grew an extra arc');
+  assert.equal(slices[5]?.key, 'others');
+  assert.equal(slices[5]?.label, 'Others');
+  assert.equal(slices[5]?.amount, 100);
+});
+
+test('a truncated list still accounts for the whole total', () => {
+  // The analytics endpoint returns only the top few categories, so the entries
+  // add up to less than the month did. Summing the tail would lose the
+  // difference and draw a chart that quietly excludes real spending.
+  const slices = toBreakdown(1000, [slice('a', 500), slice('b', 200)], options);
+
+  assert.equal(slices[slices.length - 1]?.key, 'others');
+  assert.equal(slices[slices.length - 1]?.amount, 300);
+  assert.equal(
+    slices.reduce((total, entry) => total + entry.amount, 0),
+    1000,
+    'the slices do not add up to the period total',
+  );
+});
+
+test('an exactly accounted list gets no Others band', () => {
+  const slices = toBreakdown(1000, [slice('a', 600), slice('b', 400)], options);
+  assert.ok(!slices.some((entry) => entry.key === 'others'), 'an empty Others arc was drawn');
+});
+
+test('a period with nothing spent has no slices at all', () => {
+  assert.deepEqual(toBreakdown(0, [slice('a', 0)], options), []);
+  assert.deepEqual(toBreakdown(1000, [], options), []);
+});
+
+// ------------------------------------------------------------------ assistant
+section('Suggested questions');
+
+test('every suggested question is one the server knows how to retrieve for', () => {
+  // These phrasings are matched by `keywordIntent` in the server's ai.service,
+  // and each one is asserted there by name. Changing one here without changing
+  // it there turns a suggestion chip into a generic answer.
+  const expected = [
+    'Where am I spending the most?',
+    'How much did I spend on food?',
+    'How much did I save this month?',
+    'Show my biggest expenses.',
+    'Why did I spend more this month?',
+    'How am I doing against my budgets?',
+  ];
+
+  assert.deepEqual([...SUGGESTED_QUESTIONS], expected);
+});
+
+test('a suggested question fits the composer', () => {
+  for (const question of SUGGESTED_QUESTIONS) {
+    assert.ok(question.length > 0 && question.length <= 300, question);
+  }
 });
 
 console.log(`\n${'='.repeat(60)}\n${passed} passed, ${failed} failed\n`);

@@ -24,6 +24,12 @@ export const queryKeys = {
     ['recurring', 'upcoming', withinDays, limit] as const,
   notifications: ['notifications'] as const,
   unreadCount: ['notifications', 'unread-count'] as const,
+
+  analytics: (range: Record<string, unknown>) => ['analytics', 'overview', range] as const,
+  trend: (months: number) => ['analytics', 'trend', months] as const,
+  aiStatus: ['ai', 'status'] as const,
+  aiSummary: (range: Record<string, unknown>) => ['ai', 'summary', range] as const,
+  aiChat: ['ai', 'chat'] as const,
 };
 
 /**

@@ -21,6 +21,16 @@ export type CompletionOptions = {
   maxTokens?: number;
   /** Forces a JSON object reply. Used for intent extraction, never for prose. */
   json?: boolean;
+  /**
+   * How much the model thinks before answering.
+   *
+   * The gpt-oss models spend completion tokens on reasoning before they emit
+   * anything, and that budget comes out of `maxTokens`. On a structured call
+   * that can leave nothing for the answer — Groq then rejects its own output as
+   * invalid JSON, with an empty generation. Classification and extraction do not
+   * need deliberation, so they ask for less of it.
+   */
+  reasoning?: 'low' | 'medium' | 'high';
   signal?: AbortSignal;
 };
 
@@ -121,6 +131,7 @@ async function attempt(options: CompletionOptions, model: string): Promise<strin
         messages: options.messages,
         temperature: options.temperature ?? 0.2,
         max_completion_tokens: options.maxTokens ?? 500,
+        ...(options.reasoning ? { reasoning_effort: options.reasoning } : {}),
         ...(options.json ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: controller.signal,

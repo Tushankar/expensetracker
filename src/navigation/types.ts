@@ -4,8 +4,8 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type MainTabParamList = {
   Home: undefined;
   Transactions: undefined;
+  Insights: undefined;
   Budgets: undefined;
-  Settings: undefined;
 };
 
 export type RootStackParamList = {
@@ -20,6 +20,13 @@ export type RootStackParamList = {
   /** No id means "create". */
   RecurringForm: { id?: string } | undefined;
   Notifications: undefined;
+  /**
+   * Reached from the avatar on Home rather than a tab. Settings is opened once a
+   * week; giving it a permanent quarter of the bar cost the screen people open
+   * daily.
+   */
+  Settings: undefined;
+  AiChat: undefined;
   DesignSystem: undefined;
 };
 

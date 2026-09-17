@@ -377,3 +377,171 @@ export const RECURRENCE_UNIT_LABEL: Record<RecurrenceUnit, string> = {
   month: 'months',
   year: 'years',
 };
+
+
+// ------------------------------------------------------------------- step 4
+
+export type CategoryTotal = {
+  categoryId: string | null;
+  name: string;
+  icon: string;
+  color: string;
+  amount: number;
+  count: number;
+  /** 0–100 share of the period's spending. */
+  share: number;
+};
+
+export type LargeTransaction = {
+  id: string;
+  amount: number;
+  merchant: string;
+  categoryName: string | null;
+  date: string;
+};
+
+export type PeriodComparison = {
+  previousFrom: string;
+  previousTo: string;
+  previousIncome: number;
+  previousExpenses: number;
+  expenseChange: number;
+  incomeChange: number;
+  expenseChangePercent: number | null;
+  incomeChangePercent: number | null;
+  direction: 'up' | 'down' | 'flat';
+};
+
+export type CategoryChange = {
+  categoryId: string | null;
+  name: string;
+  current: number;
+  previous: number;
+  change: number;
+  changePercent: number | null;
+};
+
+export type AnalyticsBucket = {
+  key: string;
+  label: string;
+  expense: number;
+  income: number;
+  count: number;
+};
+
+export type AnalyticsBudgetStatus = {
+  month: string;
+  hasBudgets: boolean;
+  totalBudgeted: number;
+  totalSpent: number;
+  overallPercent: number | null;
+  onTrack: number;
+  warning: number;
+  exceeded: number;
+  exceededNames: string[];
+  warningNames: string[];
+};
+
+/**
+ * Every figure the Insights screen shows, and the only figures the assistant is
+ * allowed to state. Computed by MongoDB aggregation on the server — the AI layer
+ * receives this already worked out and may only narrate it.
+ */
+export type AnalyticsOverview = {
+  period: { from: string; to: string; label: string; days: number; elapsedDays: number };
+  totalIncome: number;
+  totalExpenses: number;
+  savings: number;
+  savingsRate: number | null;
+  transferred: number;
+  transactionCount: number;
+  expenseCount: number;
+  /** Divided by days elapsed, not days in the period. */
+  averageDailySpend: number;
+  /** Today's rate carried to the end of the period. Null once it is over. */
+  projectedTotal: number | null;
+  topCategories: CategoryTotal[];
+  highestCategory: CategoryTotal | null;
+  largestExpenses: LargeTransaction[];
+  monthlyComparison: PeriodComparison;
+  categoryChanges: CategoryChange[];
+  weekly: AnalyticsBucket[];
+  daily: AnalyticsBucket[];
+  budgetStatus: AnalyticsBudgetStatus;
+};
+
+export type AiSummary = {
+  text: string;
+  /** False when the server's own computed wording was used instead of the model's. */
+  fromModel: boolean;
+  /** True when there is too little data to call anything a pattern. */
+  limitedData: boolean;
+  facts: {
+    totalExpenses: number;
+    totalIncome: number;
+    savings: number;
+    savingsRate: number | null;
+    topCategory: string | null;
+    expenseChange: number;
+    direction: 'up' | 'down' | 'flat';
+  };
+};
+
+export type AiInsight = {
+  title: string;
+  body: string;
+  tone: 'neutral' | 'positive' | 'warning';
+  category: string | null;
+};
+
+export type AiAnswerContext = {
+  intent: string;
+  periodLabel: string;
+  categoryName?: string;
+  amount?: number;
+  count?: number;
+  transactions?: { id: string; merchant: string; amount: number; date: string }[];
+};
+
+export type AiAnswer = {
+  text: string;
+  fromModel: boolean;
+  limitedData: boolean;
+  /** What the server looked up to answer, so the UI can show its working. */
+  context: AiAnswerContext;
+};
+
+export type AiChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  context: AiAnswerContext;
+  fromModel: boolean;
+  limitedData: boolean;
+  createdAt: string;
+};
+
+export type CategorySuggestion = {
+  categoryId: string | null;
+  categoryName: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+  fromModel: boolean;
+  alternatives: { categoryId: string; categoryName: string }[];
+};
+
+/**
+ * The questions the chat offers before anyone types.
+ *
+ * A blank assistant is an assistant nobody uses: the first problem is not
+ * understanding the answer, it is not knowing what it can be asked. These are
+ * also the phrasings the server's intent resolution handles best.
+ */
+export const SUGGESTED_QUESTIONS: readonly string[] = [
+  'Where am I spending the most?',
+  'How much did I spend on food?',
+  'How much did I save this month?',
+  'Show my biggest expenses.',
+  'Why did I spend more this month?',
+  'How am I doing against my budgets?',
+];
