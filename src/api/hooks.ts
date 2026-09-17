@@ -23,6 +23,8 @@ import {
   recurringApi,
   transactionApi,
   userApi,
+  peopleApi,
+  moneyOwedApi,
 } from './endpoints';
 import { queryKeys } from './queryClient';
 import { fileFromUri, uploadToCloudinary } from './uploads';
@@ -820,5 +822,133 @@ export function useDeleteProfile() {
       await signOut();
       client.clear();
     },
+  });
+}
+
+// ------------------------------------------------------------------- Phase B.5
+
+function invalidatePeopleAndObligations(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ['people'] }),
+    client.invalidateQueries({ queryKey: ['moneyOwed'] }),
+    client.invalidateQueries({ queryKey: queryKeys.accounts }),
+  ]).then(() => undefined);
+}
+
+export function usePeople(search?: string) {
+  return useQuery({
+    queryKey: queryKeys.people(search),
+    queryFn: () => peopleApi.list(search),
+  });
+}
+
+export function usePeopleSummary() {
+  return useQuery({
+    queryKey: queryKeys.peopleSummary,
+    queryFn: () => peopleApi.summary(),
+  });
+}
+
+export function usePerson(id: string) {
+  return useQuery({
+    queryKey: queryKeys.person(id),
+    queryFn: () => peopleApi.get(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreatePerson() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: import('./types').CreatePersonInput) => peopleApi.create(input),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['people'] });
+    },
+  });
+}
+
+export function useUpdatePerson() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<import('./types').CreatePersonInput> }) =>
+      peopleApi.update(id, patch),
+    onSuccess: (_, { id }) => {
+      void client.invalidateQueries({ queryKey: ['people'] });
+      void client.invalidateQueries({ queryKey: queryKeys.person(id) });
+    },
+  });
+}
+
+export function useDeletePerson() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => peopleApi.delete(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['people'] });
+    },
+  });
+}
+
+export function useMoneyOwedList(filters?: { personId?: string; direction?: string; status?: string }) {
+  return useQuery({
+    queryKey: queryKeys.moneyOwed(filters),
+    queryFn: () => moneyOwedApi.list(filters),
+  });
+}
+
+export function useMoneyOwed(id: string) {
+  return useQuery({
+    queryKey: queryKeys.moneyOwedDetail(id),
+    queryFn: () => moneyOwedApi.get(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useRepayments(obligationId: string) {
+  return useQuery({
+    queryKey: queryKeys.repayments(obligationId),
+    queryFn: () => moneyOwedApi.listRepayments(obligationId),
+    enabled: Boolean(obligationId),
+  });
+}
+
+export function useCreateMoneyOwed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: import('./types').CreateMoneyOwedInput) => moneyOwedApi.create(input),
+    onSuccess: () => invalidatePeopleAndObligations(client),
+  });
+}
+
+export function useRecordRepayment() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: import('./types').RecordRepaymentInput;
+    }) => moneyOwedApi.recordRepayment(id, input),
+    onSuccess: (_, { id }) => {
+      void invalidatePeopleAndObligations(client);
+      void client.invalidateQueries({ queryKey: queryKeys.repayments(id) });
+    },
+  });
+}
+
+export function useWriteOffObligation() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) => moneyOwedApi.writeOff(id, note),
+    onSuccess: () => invalidatePeopleAndObligations(client),
+  });
+}
+
+export function useDeleteMoneyOwed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => moneyOwedApi.delete(id),
+    onSuccess: () => invalidatePeopleAndObligations(client),
   });
 }

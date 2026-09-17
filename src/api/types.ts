@@ -439,6 +439,71 @@ export type AnalyticsBucket = {
   count: number;
 };
 
+export type MetricChange = {
+  amount: number;
+  percent: number | null;
+  direction: 'up' | 'down' | 'flat';
+  text: string;
+};
+
+export type TopMerchant = {
+  merchant: string;
+  totalSpent: number;
+  count: number;
+};
+
+export type AccountAnalytics = {
+  accountId: string;
+  accountName: string;
+  type: string;
+  icon: string;
+  color: string;
+  spending: number;
+  incoming: number;
+  transfers: number;
+};
+
+export type PeopleAnalytics = {
+  totalOwedToMe: number;
+  totalIOwe: number;
+  netBalance: number;
+  activePeopleCount: number;
+  people: {
+    id: string;
+    name: string;
+    balance: number;
+    direction: 'they_owe' | 'i_owe' | 'settled';
+  }[];
+};
+
+export type RecurringUpcomingItem = {
+  id: string;
+  type: 'expense' | 'income' | 'transfer';
+  amount: number;
+  merchant: string;
+  categoryName: string | null;
+  dueDate: string;
+  isOverdue: boolean;
+};
+
+export type RecurringAnalytics = {
+  estimatedMonthlyCost: number;
+  upcomingCount: number;
+  upcoming: RecurringUpcomingItem[];
+};
+
+export type BudgetItem = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  budgeted: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+  state: 'on_track' | 'warning' | 'exceeded';
+};
+
 export type AnalyticsBudgetStatus = {
   month: string;
   hasBudgets: boolean;
@@ -450,6 +515,7 @@ export type AnalyticsBudgetStatus = {
   exceeded: number;
   exceededNames: string[];
   warningNames: string[];
+  items?: BudgetItem[];
 };
 
 /**
@@ -478,6 +544,27 @@ export type AnalyticsOverview = {
   weekly: AnalyticsBucket[];
   daily: AnalyticsBucket[];
   budgetStatus: AnalyticsBudgetStatus;
+
+  // Phase C: Core Accounting & Analytics Invariants
+  personalExpense: number;
+  income: number;
+  transfers: number;
+  moneyLent: number;
+  repaymentsReceived: number;
+  moneyBorrowed: number;
+  repaymentsMade: number;
+  netCashFlow: number;
+
+  spendingChange: MetricChange;
+  incomeChange: MetricChange;
+  transactionCountChange: MetricChange;
+
+  categoryBreakdown: CategoryTotal[];
+  dailySpending: AnalyticsBucket[];
+  topMerchants: TopMerchant[];
+  accountBreakdown: AccountAnalytics[];
+  peopleSummary: PeopleAnalytics;
+  recurringSummary: RecurringAnalytics;
 };
 
 export type AiSummary = {
@@ -578,6 +665,8 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
  * by what. Nothing is written until the preview is confirmed.
  */
 export type QuickEntryProposal = {
+  /** The detected transaction type — 'income' when salary/earned phrasing is found. */
+  type: 'expense' | 'income';
   /** Null when no amount could be read. Save must stay disabled. */
   amount: number | null;
   merchant: string;
@@ -593,6 +682,20 @@ export type QuickEntryProposal = {
   /** What it was unsure about, in words the preview can show. */
   warnings: string[];
   matched: { amount: string | null; date: string | null; method: string | null };
+  /** Person obligation details if detected deterministically */
+  obligation?: {
+    personName: string;
+    direction: 'owed_to_me' | 'i_owe';
+    type: 'loan' | 'paid_for' | 'borrowed';
+  } | null;
+  /** A recent transaction that looks like a duplicate of this one. */
+  possibleDuplicate?: {
+    id: string;
+    amount: number;
+    merchant: string;
+    date: string;
+    minutesAgo: number;
+  } | null;
 };
 
 export type MerchantMemory = {
@@ -638,14 +741,40 @@ export type UploadedImage = {
   height: number;
 };
 
+export type ReceiptConfidenceLevel = 'high' | 'needs_review' | 'unresolved';
+
 export type ReceiptExtraction = {
   merchant: string;
   amount: number | null;
   /** The printed line the total was read from, so a person can check it. */
   amountText: string;
+  subtotal: number | null;
+  tax: number | null;
+  discount: number | null;
   date: string | null;
+  isDateDefault?: boolean;
   items: { name: string; amount: number | null }[];
+  categoryHint?: string | null;
+  accountHint?: string | null;
   paymentMethod: string | null;
+  suggestedCategoryId?: string | null;
+  suggestedAccountId?: string | null;
+  accountStatus?: 'resolved' | 'suggested' | 'unresolved';
+  warnings?: string[];
+  confidenceDetails?: {
+    merchant: ReceiptConfidenceLevel;
+    amount: ReceiptConfidenceLevel;
+    date: ReceiptConfidenceLevel;
+    account: ReceiptConfidenceLevel;
+    paymentMethod: ReceiptConfidenceLevel;
+  };
+  possibleDuplicate?: {
+    id: string;
+    amount: number;
+    merchant: string;
+    date: string;
+    minutesAgo: number;
+  } | null;
   confidence: 'high' | 'medium' | 'low';
   extractedAt: string | null;
 };
@@ -673,11 +802,20 @@ export type Receipt = {
  */
 export const QUICK_ENTRY_EXAMPLES: readonly string[] = [
   'Petrol 1200',
+  'Chai 20',
   'Zomato 450',
+  'Lunch 150',
   'DMart 2380',
+  'Vegetables 180',
   'Netflix 649',
-  'Chai 40 cash',
-  'Uber 260 yesterday',
+  'Dinner 350',
+  'Snacks 80',
+  'Uber 320',
+  'IndianOil 1500',
+  'Coffee 180',
+  'Cigarettes 220',
+  'Alcohol 1200',
+  'Uber 320 yesterday',
 ];
 
 
@@ -703,4 +841,88 @@ export type DeletionSummary = {
   merchantMemories: number;
   aiMessages: number;
   sessions: number;
+};
+
+// ------------------------------------------------------------------- Phase B.5
+
+export type ObligationDirection = 'owed_to_me' | 'i_owe';
+export type ObligationType = 'loan' | 'paid_for' | 'borrowed' | 'split';
+export type ObligationStatus = 'active' | 'settled' | 'written_off';
+
+export type Person = {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  avatar?: string;
+  note?: string;
+  totalOwedToMe: number;
+  totalIOwe: number;
+  activeObligationsCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PeopleSummary = {
+  totalOwedToMe: number;
+  totalIOwe: number;
+  netBalance: number;
+  peopleCount: number;
+};
+
+export type MoneyOwed = {
+  id: string;
+  personId: string;
+  personName: string;
+  direction: ObligationDirection;
+  type: ObligationType;
+  originalAmount: number;
+  remainingAmount: number;
+  purpose: string;
+  categoryId: string | null;
+  accountId: string;
+  dueDate: string | null;
+  status: ObligationStatus;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Repayment = {
+  id: string;
+  moneyOwedId: string;
+  personId: string;
+  amount: number;
+  accountId: string;
+  date: string;
+  note: string;
+  createdAt: string;
+};
+
+export type CreatePersonInput = {
+  name: string;
+  phone?: string;
+  email?: string;
+  avatar?: string;
+  note?: string;
+};
+
+export type CreateMoneyOwedInput = {
+  personId?: string;
+  personName?: string;
+  direction: ObligationDirection;
+  type?: ObligationType;
+  amount: number;
+  purpose: string;
+  categoryId?: string | null;
+  accountId: string;
+  dueDate?: string | null;
+  note?: string;
+};
+
+export type RecordRepaymentInput = {
+  amount: number;
+  accountId: string;
+  date?: string;
+  note?: string;
 };

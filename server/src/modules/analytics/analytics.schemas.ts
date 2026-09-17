@@ -15,20 +15,43 @@ const isoDate = z.coerce.date().refine((value) => !Number.isNaN(value.getTime())
  */
 export const overviewSchema = z
   .object({
-    from: isoDate,
-    to: isoDate,
+    period: z.enum(['day', 'week', 'month', 'year', 'custom']).optional(),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    startDate: isoDate.optional(),
+    endDate: isoDate.optional(),
     previousFrom: isoDate.optional(),
     previousTo: isoDate.optional(),
-    label: z.string().trim().max(60).default('this period'),
+    label: z.string().trim().max(60).optional(),
   })
-  .refine((value) => value.from <= value.to, {
-    message: 'The start date must come before the end date',
-    path: ['from'],
-  })
-  .refine((value) => value.to.getTime() - value.from.getTime() <= 400 * 86_400_000, {
-    message: 'Ask for at most a year at a time',
-    path: ['to'],
-  });
+  .refine(
+    (value) => {
+      const effectiveFrom = value.from ?? value.startDate;
+      const effectiveTo = value.to ?? value.endDate;
+      if (effectiveFrom && effectiveTo) {
+        return effectiveFrom <= effectiveTo;
+      }
+      return true;
+    },
+    {
+      message: 'The start date must come before the end date',
+      path: ['from'],
+    },
+  )
+  .refine(
+    (value) => {
+      const effectiveFrom = value.from ?? value.startDate;
+      const effectiveTo = value.to ?? value.endDate;
+      if (effectiveFrom && effectiveTo) {
+        return effectiveTo.getTime() - effectiveFrom.getTime() <= 400 * 86_400_000;
+      }
+      return true;
+    },
+    {
+      message: 'Ask for at most a year at a time',
+      path: ['to'],
+    },
+  );
 
 export const trendSchema = z.object({
   months: z.coerce.number().int().min(2).max(24).default(6),

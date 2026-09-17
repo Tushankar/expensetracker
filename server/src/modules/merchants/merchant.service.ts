@@ -64,10 +64,26 @@ export async function rememberMerchant(
   userId: string,
   merchant: string | undefined | null,
   categoryId: Types.ObjectId | string | null | undefined,
+  options?: {
+    accountId?: Types.ObjectId | string | null;
+    paymentMethod?: string | null;
+  },
 ): Promise<void> {
   const label = (merchant ?? '').trim();
   const key = merchantKey(label);
   if (!key || !categoryId) return;
+
+  const $set: Record<string, unknown> = {
+    merchantLabel: label.slice(0, 120),
+    lastUsedAt: new Date(),
+  };
+
+  if (options?.accountId) {
+    $set.preferredAccountId = new Types.ObjectId(String(options.accountId));
+  }
+  if (options?.paymentMethod) {
+    $set.preferredPaymentMethod = options.paymentMethod;
+  }
 
   try {
     await MerchantMemoryModel.updateOne(
@@ -78,7 +94,7 @@ export async function rememberMerchant(
       },
       {
         $inc: { count: 1 },
-        $set: { merchantLabel: label.slice(0, 120), lastUsedAt: new Date() },
+        $set,
       },
       { upsert: true },
     );
@@ -93,6 +109,10 @@ export type RecalledMerchant = {
   /** How many times this user has filed this merchant here. */
   count: number;
   merchantLabel: string;
+  /** The account this merchant was last filed under, if any. */
+  preferredAccountId: string | null;
+  /** The payment method this merchant was last filed with, if any. */
+  preferredPaymentMethod: string | null;
 };
 
 /**
@@ -138,6 +158,8 @@ export async function recallMerchant(
         categoryName: category.name,
         count: row.count,
         merchantLabel: row.merchantLabel,
+        preferredAccountId: row.preferredAccountId ? String(row.preferredAccountId) : null,
+        preferredPaymentMethod: (row as any).preferredPaymentMethod ?? null,
       };
     }
   }

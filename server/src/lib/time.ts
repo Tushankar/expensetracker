@@ -88,6 +88,11 @@ export function weekRange(instant: Date, zone: string): Range {
   return { from: local.startOf('week').toJSDate(), to: local.endOf('week').toJSDate() };
 }
 
+export function yearRange(instant: Date, zone: string): Range {
+  const local = at(instant, zone);
+  return { from: local.startOf('year').toJSDate(), to: local.endOf('year').toJSDate() };
+}
+
 export type RecurrenceUnit = 'day' | 'week' | 'month' | 'year';
 
 /**

@@ -12,6 +12,7 @@ import { RecurringModel } from '../modules/recurring/recurring.model';
 import { TransactionModel } from '../modules/transactions/transaction.model';
 import { UserModel } from '../modules/users/user.model';
 import { initialSchedule } from '../modules/recurring/recurring.service';
+import { flattenDefaults } from '../seed/defaultCategories';
 import { seedUserDefaults } from '../seed/seedUser';
 
 /**
@@ -64,6 +65,13 @@ async function main(): Promise<void> {
   }
 
   const userId = user._id;
+
+  // Sync any newly added default categories so they exist for the user
+  const existingNames = new Set((await CategoryModel.find({ userId }).select('name').lean()).map((c) => c.name));
+  const missing = flattenDefaults().filter((c) => !existingNames.has(c.name)).map((c) => ({ ...c, userId }));
+  if (missing.length > 0) {
+    await CategoryModel.insertMany(missing, { ordered: false });
+  }
 
   const categories = await CategoryModel.find({ userId }).lean();
   const byName = new Map(categories.map((category) => [category.name, category._id]));

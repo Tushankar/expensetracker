@@ -6,6 +6,7 @@ import {
   getCategoriesSpend,
   getCategorySpend,
   getDayTotal,
+  getMerchantSpend,
   getOverview,
   type AnalyticsOverview,
 } from '../analytics/analytics.service';
@@ -14,6 +15,7 @@ import { recallMerchant } from '../merchants/merchant.service';
 
 import { checkGrounding, verify, type VerifiedReply } from './ai.guard';
 import { complete, isAiConfigured, AiUnavailableError } from './groq.client';
+import { matchDirectCategory, matchIndianMerchant } from './knowledge/indianKnowledge';
 import {
   CATEGORISE_INSTRUCTION,
   INSIGHTS_INSTRUCTION,
@@ -323,6 +325,11 @@ export type Intent =
   | 'budget_status'
   | 'today'
   | 'advice'
+  | 'merchant_spend'
+  | 'who_owes_me'
+  | 'i_owe'
+  | 'money_lent'
+  | 'repayments'
   | 'general';
 
 export type ResolvedIntent = { intent: Intent; categoryName?: string; groupName?: string };
@@ -347,7 +354,12 @@ const SECTIONS_FOR: Record<Intent, readonly FactSection[]> = {
   budget_status: ['totals', 'budgets'],
   today: ['totals'],
   advice: ['totals'],
-  general: ['totals', 'categories', 'comparison'],
+  merchant_spend: ['totals', 'merchants'],
+  who_owes_me: ['totals', 'people'],
+  i_owe: ['totals', 'people'],
+  money_lent: ['totals', 'cashFlow', 'people'],
+  repayments: ['totals', 'cashFlow', 'people'],
+  general: ['totals', 'categories', 'comparison', 'merchants', 'people', 'cashFlow'],
 };
 
 /**
@@ -367,10 +379,18 @@ async function resolveIntent(
   groupNames: string[],
 ): Promise<ResolvedIntent> {
   const keyword = keywordIntent(question, categoryNames, groupNames);
-  // An advice question is settled here and never sent for phrasing — see
-  // `answerQuestion`. Asking a model to decline gracefully is a worse guarantee
-  // than not asking it at all.
-  if (keyword.intent === 'advice' || !isAiConfigured()) return keyword;
+  // Deterministic financial/obligation intents or advice are settled immediately
+  if (
+    keyword.intent === 'advice' ||
+    keyword.intent === 'who_owes_me' ||
+    keyword.intent === 'i_owe' ||
+    keyword.intent === 'money_lent' ||
+    keyword.intent === 'repayments' ||
+    keyword.intent === 'merchant_spend' ||
+    !isAiConfigured()
+  ) {
+    return keyword;
+  }
 
   try {
     const raw = await complete({
@@ -383,13 +403,18 @@ async function resolveIntent(
         {
           role: 'system',
           content: `Classify a question about personal spending. Reply with JSON only:
-{"intent":"total_spend|category_spend|savings|income|largest_expenses|top_category|comparison|budget_status|today|advice|general","category":"exact category name from the list, or null","group":"exact group name from the list, or null"}
+{"intent":"total_spend|category_spend|savings|income|largest_expenses|top_category|comparison|budget_status|today|advice|who_owes_me|i_owe|money_lent|repayments|merchant_spend|general","category":"exact category name from the list, or null","group":"exact group name from the list, or null"}
 
 - "category_spend": about one named category or group of spending.
 - "top_category": "where am I spending the most".
 - "comparison": "why did I spend more", "versus last month".
 - "today": about today specifically.
 - "advice": asking what they SHOULD do with money — investing, saving strategy, whether to buy something.
+- "who_owes_me": asking about who owes the user money.
+- "i_owe": asking about debts or money the user owes.
+- "money_lent": asking about money lent out.
+- "repayments": asking about repayments received or made.
+- "merchant_spend": asking about spending at a particular merchant.
 - Prefer "group" when the question names a broad area like food, transport or shopping, and "category" when it names a specific one like Petrol or Netflix.
 
 Category MUST be copied exactly from this list, or null:
@@ -465,6 +490,27 @@ export function keywordIntent(
   }
   if (/\bwhere\b.*\b(money|spend|spending|going?|goes)\b/.test(text)) {
     return { intent: 'top_category' };
+  }
+  if (/\bwho owes me\b|\bowes? me\b|\bmoney owed to me\b/i.test(text)) {
+    return { intent: 'who_owes_me' };
+  }
+  if (/\b(do i owe|who do i owe|i owe|my debts)\b/i.test(text)) {
+    return { intent: 'i_owe' };
+  }
+  if (/\b(lend|lent|loaned)\b/i.test(text)) {
+    return { intent: 'money_lent' };
+  }
+  if (/\b(repay|repaid|repayment|repayments|paid me back)\b/i.test(text)) {
+    return { intent: 'repayments' };
+  }
+  const commonMerchants = [
+    'zomato', 'swiggy', 'amazon', 'blinkit', 'dmart', 'uber', 'ola',
+    'myntra', 'netflix', 'indianoil', 'zepto', 'flipkart', 'bigbasket',
+    'makemytrip', 'starbucks', 'tata', 'airtel', 'jio'
+  ];
+  const matchedMerchant = commonMerchants.find((m) => text.includes(m));
+  if (matchedMerchant && /\b(spend|spent|on|at|for)\b/i.test(text)) {
+    return { intent: 'merchant_spend', categoryName: matchedMerchant };
   }
   if (/\b(more|less|than last|compared|why)\b/.test(text)) return { intent: 'comparison' };
   if (/\bbudget/.test(text)) return { intent: 'budget_status' };
@@ -619,6 +665,90 @@ export async function answerQuestion(
         ? 'Nothing recorded today yet.'
         : `You have spent ${rupees(today.amount)} today, across ${today.count} ${
             today.count === 1 ? 'transaction' : 'transactions'
+          }.`;
+  }
+
+  if (resolved.intent === 'who_owes_me') {
+    const debtors =
+      overview.peopleSummary?.people.filter((p) => p.direction === 'they_owe' && p.balance > 0) ?? [];
+    const total = overview.peopleSummary?.totalOwedToMe ?? 0;
+    context.amount = total;
+    context.count = debtors.length;
+    facts += `\n\nPEOPLE WHO OWE YOU MONEY:\n  Total owed to you: ${rupees(total)}`;
+    if (debtors.length > 0) {
+      facts += `\n  Debtors: ${debtors.map((p) => `${p.name} owes ${rupees(p.balance)}`).join(', ')}`;
+      fallback = `You are owed a total of ${rupees(total)} by ${debtors.length} ${
+        debtors.length === 1 ? 'person' : 'people'
+      }: ${debtors.slice(0, 3).map((p) => `${p.name} (${rupees(p.balance)})`).join(', ')}.`;
+    } else {
+      fallback = 'Nobody owes you money right now.';
+    }
+  }
+
+  if (resolved.intent === 'i_owe') {
+    const creditors =
+      overview.peopleSummary?.people.filter((p) => p.direction === 'i_owe' && p.balance > 0) ?? [];
+    const total = overview.peopleSummary?.totalIOwe ?? 0;
+    context.amount = total;
+    context.count = creditors.length;
+    facts += `\n\nMONEY YOU OWE OTHERS:\n  Total you owe: ${rupees(total)}`;
+    if (creditors.length > 0) {
+      facts += `\n  Creditors: ${creditors.map((p) => `${p.name}: ${rupees(p.balance)}`).join(', ')}`;
+      fallback = `You owe a total of ${rupees(total)} to ${creditors.length} ${
+        creditors.length === 1 ? 'person' : 'people'
+      }: ${creditors.slice(0, 3).map((p) => `${p.name} (${rupees(p.balance)})`).join(', ')}.`;
+    } else {
+      fallback = "You don't owe any money to anyone right now.";
+    }
+  }
+
+  if (resolved.intent === 'money_lent') {
+    const lent = overview.moneyLent ?? 0;
+    context.amount = lent;
+    facts += `\n\nMONEY LENT IN ${label.toUpperCase()}:\n  Total lent: ${rupees(lent)}`;
+    fallback =
+      lent === 0
+        ? `You did not lend any money in ${label}.`
+        : `You lent a total of ${rupees(lent)} in ${label}.`;
+  }
+
+  if (resolved.intent === 'repayments') {
+    const received = overview.repaymentsReceived ?? 0;
+    const made = overview.repaymentsMade ?? 0;
+    context.amount = received;
+    facts += `\n\nREPAYMENTS IN ${label.toUpperCase()}:\n  Repayments received: ${rupees(received)}\n  Repayments made: ${rupees(made)}`;
+    fallback =
+      received === 0 && made === 0
+        ? `No repayments were recorded in ${label}.`
+        : `You received ${rupees(received)} in repayments and made ${rupees(made)} in repayments in ${label}.`;
+  }
+
+  if (resolved.intent === 'merchant_spend' && resolved.categoryName) {
+    const detail = await getMerchantSpend(userId, resolved.categoryName, range);
+    context.categoryName = detail.merchant;
+    context.amount = detail.amount;
+    context.count = detail.count;
+    context.transactions = detail.transactions.map((row) => ({
+      id: row.id,
+      merchant: row.merchant,
+      amount: row.amount,
+      date: row.date,
+    }));
+
+    facts += `\n\nSPENDING AT ${detail.merchant.toUpperCase()} IN ${label.toUpperCase()}:\n  Total: ${rupees(
+      detail.amount,
+    )} across ${detail.count} transactions`;
+    if (detail.transactions.length > 0) {
+      facts += `\n  Recent: ${detail.transactions
+        .map((row) => `${rupees(row.amount)} on ${row.date.split('T')[0]}`)
+        .join(', ')}`;
+    }
+
+    fallback =
+      detail.count === 0
+        ? `Nothing recorded for ${detail.merchant} in ${label}.`
+        : `You spent ${rupees(detail.amount)} at ${detail.merchant} in ${label}, across ${detail.count} ${
+            detail.count === 1 ? 'transaction' : 'transactions'
           }.`;
   }
 
@@ -888,8 +1018,24 @@ export function localCategoryGuess(
   description: string | undefined,
   available: string[],
 ): string | null {
-  const haystack = `${merchant} ${description ?? ''}`;
+  const haystack = `${merchant} ${description ?? ''}`.trim();
 
+  // 1. Check Indian knowledge base
+  const known = matchIndianMerchant(haystack);
+  if (known && available.includes(known.categoryName)) return known.categoryName;
+
+  // 2. Check direct category keywords
+  const direct = matchDirectCategory(haystack);
+  if (direct) {
+    if (available.includes(direct.categoryName)) return direct.categoryName;
+    if (direct.aliases) {
+      for (const alias of direct.aliases) {
+        if (available.includes(alias)) return alias;
+      }
+    }
+  }
+
+  // 3. Built-in pattern hints
   for (const [pattern, name] of MERCHANT_HINTS) {
     if (pattern.test(haystack) && available.includes(name)) return name;
   }

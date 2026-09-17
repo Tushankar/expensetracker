@@ -10,6 +10,8 @@ import { AiChatScreen } from '@/screens/AiChatScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { InsightsScreen } from '@/screens/InsightsScreen';
 import { NotificationsScreen } from '@/screens/NotificationsScreen';
+import { PeopleScreen } from '@/screens/PeopleScreen';
+import { PersonDetailScreen } from '@/screens/PersonDetailScreen';
 import { RecurringFormScreen } from '@/screens/RecurringFormScreen';
 import { RecurringScreen } from '@/screens/RecurringScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
@@ -128,7 +130,17 @@ export function RootNavigator() {
           <Stack.Screen
             name="DesignSystem"
             component={DesignSystemScreen}
-            options={{ headerShown: true, title: 'Design system' }}
+            options={{ headerShown: true, title: 'Design System' }}
+          />
+          <Stack.Screen
+            name="People"
+            component={PeopleScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PersonDetail"
+            component={PersonDetailScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Group>
       ) : (

@@ -1,5 +1,7 @@
 import { Schema, model, type InferSchemaType } from 'mongoose';
 
+import { PAYMENT_METHODS } from '../transactions/transaction.model';
+
 /**
  * What this user has filed each merchant under, and how often.
  *
@@ -27,6 +29,10 @@ const merchantMemorySchema = new Schema(
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
     count: { type: Number, required: true, default: 1, min: 1 },
     lastUsedAt: { type: Date, required: true, default: () => new Date() },
+    /** The account this merchant was last filed under. A suggestion, not a command. */
+    preferredAccountId: { type: Schema.Types.ObjectId, ref: 'Account', default: null },
+    /** The payment method this merchant was last filed with. */
+    preferredPaymentMethod: { type: String, enum: [...PAYMENT_METHODS, null], default: null },
   },
   { timestamps: true },
 );

@@ -443,6 +443,164 @@ async function main(): Promise<void> {
     expectError(await call('POST', '/ai/parse', { body: { text: 'Zomato 450' } }), 401);
   });
 
+  section('Phase B: Indian Smart Text Entry');
+
+  const bSession = data<Session>(
+    await call('POST', '/auth/register', {
+      body: {
+        name: 'Step Five B',
+        email: `step5b.${Date.now()}@paisa.test`,
+        password: 'Str0ng!Passw0rd',
+        currency: 'INR',
+      },
+    }),
+  );
+  const bToken = bSession.accessToken;
+
+  await test('parses "Petrol 1200" with high confidence and Petrol category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Petrol 1200' } }),
+    );
+    assert.equal(proposal.amount, paise(1200));
+    assert.equal(proposal.categoryName, 'Petrol');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Zomato 450" with Zomato merchant and category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Zomato 450' } }),
+    );
+    assert.equal(proposal.amount, paise(450));
+    assert.equal(proposal.merchant, 'Zomato');
+    assert.equal(proposal.categoryName, 'Zomato');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "DMart 2380" with DMart merchant and Grocery category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'DMart 2380' } }),
+    );
+    assert.equal(proposal.amount, paise(2380));
+    assert.equal(proposal.merchant, 'DMart');
+    assert.ok(proposal.categoryName === 'Grocery' || proposal.categoryName === 'Supermarket');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Netflix 649" with Netflix merchant and category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Netflix 649' } }),
+    );
+    assert.equal(proposal.amount, paise(649));
+    assert.equal(proposal.merchant, 'Netflix');
+    assert.equal(proposal.categoryName, 'Netflix');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Uber 320" with Uber merchant and category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Uber 320' } }),
+    );
+    assert.equal(proposal.amount, paise(320));
+    assert.equal(proposal.merchant, 'Uber');
+    assert.equal(proposal.categoryName, 'Uber');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "IndianOil 1500" with IndianOil merchant and Petrol category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'IndianOil 1500' } }),
+    );
+    assert.equal(proposal.amount, paise(1500));
+    assert.equal(proposal.merchant, 'IndianOil');
+    assert.equal(proposal.categoryName, 'Petrol');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Coffee 180" with Cafe category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Coffee 180' } }),
+    );
+    assert.equal(proposal.amount, paise(180));
+    assert.equal(proposal.categoryName, 'Cafe');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Cigarettes 220" with Cigarettes category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Cigarettes 220' } }),
+    );
+    assert.equal(proposal.amount, paise(220));
+    assert.equal(proposal.categoryName, 'Cigarettes');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Uber 320 yesterday" extracting yesterday date', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Uber 320 yesterday' } }),
+    );
+    assert.equal(proposal.amount, paise(320));
+    assert.equal(proposal.merchant, 'Uber');
+    assert.equal(proposal.categoryName, 'Uber');
+    const proposedDate = DateTime.fromISO(proposal.date, { zone: IST });
+    const nowIST = DateTime.now().setZone(IST);
+    const yesterdayIST = nowIST.minus({ days: 1 });
+    assert.equal(proposedDate.toFormat('yyyy-MM-dd'), yesterdayIST.toFormat('yyyy-MM-dd'));
+  });
+
+  await test('parses "Chai 20" with Tea & Chai category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Chai 20' } }),
+    );
+    assert.equal(proposal.amount, paise(20));
+    assert.equal(proposal.categoryName, 'Tea & Chai');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Lunch 150" with Lunch category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Lunch 150' } }),
+    );
+    assert.equal(proposal.amount, paise(150));
+    assert.equal(proposal.categoryName, 'Lunch');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Dinner 350" with Dinner category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Dinner 350' } }),
+    );
+    assert.equal(proposal.amount, paise(350));
+    assert.equal(proposal.categoryName, 'Dinner');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Snacks 80" with Snacks category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Snacks 80' } }),
+    );
+    assert.equal(proposal.amount, paise(80));
+    assert.equal(proposal.categoryName, 'Snacks');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Vegetables 180" with Vegetables category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Vegetables 180' } }),
+    );
+    assert.equal(proposal.amount, paise(180));
+    assert.equal(proposal.categoryName, 'Vegetables');
+    assert.equal(proposal.confidence, 'high');
+  });
+
+  await test('parses "Alcohol 1200" with Alcohol category', async () => {
+    const { proposal } = data<{ proposal: Proposal }>(
+      await call('POST', '/ai/parse', { token: bToken, body: { text: 'Alcohol 1200' } }),
+    );
+    assert.equal(proposal.amount, paise(1200));
+    assert.equal(proposal.categoryName, 'Alcohol');
+    assert.equal(proposal.confidence, 'high');
+  });
+
   section('Merchant memory');
 
   const shop = 'Kaveri Fuels';

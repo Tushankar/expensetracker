@@ -46,6 +46,7 @@ transactionSchema.index({ userId: 1, date: -1, _id: -1 });
 transactionSchema.index({ userId: 1, type: 1, date: -1 });
 transactionSchema.index({ userId: 1, accountId: 1, date: -1 });
 transactionSchema.index({ userId: 1, categoryId: 1, date: -1 });
+transactionSchema.index({ userId: 1, type: 1, merchant: 1 });
 // Transfers are found from either side, and the balance recalculation reads both.
 transactionSchema.index({ userId: 1, destinationAccountId: 1, date: -1 });
 /**

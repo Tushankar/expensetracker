@@ -7,6 +7,7 @@ import {
   useAccounts,
   useBudgets,
   useCategoryMap,
+  usePeopleSummary,
   useSummary,
   useTransactionList,
   useUnreadCount,
@@ -21,7 +22,9 @@ import {
   BalanceCard,
   GreetingHeader,
   HeaderGlow,
+  PeopleOwedCard,
   QuickActions,
+  QuickAddBar,
   SavingsCard,
   SpendingOverview,
 } from '@/components/home';
@@ -79,6 +82,7 @@ export function HomeScreen() {
   const recentQuery = useTransactionList({ limit: RECENT_COUNT, from: range.from, to: range.to });
   const categories = useCategoryMap();
   const unreadQuery = useUnreadCount();
+  const peopleSummaryQuery = usePeopleSummary();
 
   const contentWidth =
     Math.min(width, theme.layout.maxContentWidth) - theme.layout.screenGutter * 2;
@@ -135,7 +139,7 @@ export function HomeScreen() {
   );
 
   const refreshing =
-    summaryQuery.isRefetching || accountsQuery.isRefetching || recentQuery.isRefetching;
+    summaryQuery.isRefetching || accountsQuery.isRefetching || recentQuery.isRefetching || peopleSummaryQuery.isRefetching;
 
   const refresh = useCallback(() => {
     void summaryQuery.refetch();
@@ -144,7 +148,8 @@ export function HomeScreen() {
     void recentQuery.refetch();
     void budgetsQuery.refetch();
     void upcomingQuery.refetch();
-  }, [summaryQuery, previousQuery, accountsQuery, recentQuery, budgetsQuery, upcomingQuery]);
+    void peopleSummaryQuery.refetch();
+  }, [summaryQuery, previousQuery, accountsQuery, recentQuery, budgetsQuery, upcomingQuery, peopleSummaryQuery]);
 
   function handleQuickAction(key: ActionHue) {
     if (key === 'expense' || key === 'income' || key === 'transfer') {
@@ -209,6 +214,10 @@ export function HomeScreen() {
           />
         </View>
 
+        <View style={{ marginTop: theme.spacing.md }}>
+          <QuickAddBar />
+        </View>
+
         <View style={{ marginTop: theme.spacing.xl }}>
           <PeriodSelector
             value={selection}
@@ -263,6 +272,16 @@ export function HomeScreen() {
             ) : null}
           </QueryState>
         </View>
+
+        {peopleSummaryQuery.data &&
+        (peopleSummaryQuery.data.totalOwedToMe > 0 || peopleSummaryQuery.data.totalIOwe > 0) ? (
+          <View style={{ marginTop: theme.spacing.xxl }}>
+            <PeopleOwedCard
+              summary={peopleSummaryQuery.data}
+              onPress={() => navigation.navigate('People')}
+            />
+          </View>
+        ) : null}
 
         {periodSummary ? (
           <View style={{ marginTop: theme.spacing.xxl }}>

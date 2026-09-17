@@ -34,6 +34,13 @@ export const queryKeys = {
   receiptStatus: ['receipts', 'status'] as const,
   receipts: (transactionId?: string) => ['receipts', 'list', transactionId ?? null] as const,
   merchants: (query: string) => ['merchants', query] as const,
+
+  people: (search?: string) => ['people', 'list', search ?? ''] as const,
+  peopleSummary: ['people', 'summary'] as const,
+  person: (id: string) => ['people', 'detail', id] as const,
+  moneyOwed: (filters?: Record<string, unknown>) => ['moneyOwed', 'list', filters ?? {}] as const,
+  moneyOwedDetail: (id: string) => ['moneyOwed', 'detail', id] as const,
+  repayments: (obligationId: string) => ['moneyOwed', 'repayments', obligationId] as const,
 };
 
 /**

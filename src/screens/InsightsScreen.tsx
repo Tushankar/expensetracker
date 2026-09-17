@@ -1,18 +1,30 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { Fragment, useCallback, useMemo, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
+import { Pressable, RefreshControl, View } from 'react-native';
 
 import { useAiSummary, useAnalytics, useMonthlyTrend } from '@/api';
-import { BarChart } from '@/components/charts';
 import { PeriodSelector } from '@/components/dashboard';
 import { QueryState } from '@/components/data/QueryState';
 import { SpendingOverview } from '@/components/home';
-import { AiSummaryCard, InsightCard, StatGrid } from '@/components/insights';
+import {
+  AccountAnalyticsCard,
+  AiSummaryCard,
+  BudgetAnalyticsCard,
+  CalendarSpendingCard,
+  FinancialSummaryCard,
+  InsightCard,
+  PeopleAnalyticsCard,
+  RecurringAnalyticsCard,
+  SpendingTrendCard,
+  StatGrid,
+  TopMerchantsCard,
+} from '@/components/insights';
 import {
   Card,
   Divider,
   Icon,
+  IconButton,
   MerchantAvatar,
   PageHeader,
   Screen,
@@ -25,20 +37,20 @@ import { DateRangeSheet } from '@/screens/sheets/DateRangeSheet';
 import { categoryColor, useTheme } from '@/theme';
 import type { CategorySlice } from '@/types/models';
 import { toBreakdown } from '@/utils/breakdown';
-import { formatCompactINR, formatINR } from '@/utils/currency';
+import { formatINR } from '@/utils/currency';
 import { formatDayLabel } from '@/utils/date';
+import { tapFeedback } from '@/utils/haptics';
 import { periodRange, type Period, type PeriodSelection } from '@/utils/period';
 
 /** Beyond this the bars are hairlines and the labels collide. */
 const TREND_MONTHS = 6;
 
 /**
- * Insights: the analysis, and the assistant that reads it aloud.
+ * Insights: Financial Intelligence, Analytics & AI Assistance.
  *
- * The order is deliberate — the figures come first and the assistant's wording
- * sits among them, not above them. Everything the assistant says is computed by
- * the server from this same data, and the server refuses to pass on any figure it
- * did not calculate, so the prose and the numbers below it can never disagree.
+ * Dedicated Phase C surface presenting verified accounting facts, clear separation
+ * of spending vs money movement, breakdowns by category, merchant, account, and budget,
+ * accompanied by grounded Groq natural language insights.
  */
 export function InsightsScreen() {
   const theme = useTheme();
@@ -46,10 +58,24 @@ export function InsightsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
 
   const [selection, setSelection] = useState<PeriodSelection>({ period: 'month' });
+  const [periodOffset, setPeriodOffset] = useState(0);
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeSession, setRangeSession] = useState(0);
 
-  const range = useMemo(() => periodRange(selection), [selection]);
+  const referenceDate = useMemo(() => {
+    if (periodOffset === 0) return new Date();
+    const d = new Date();
+    if (selection.period === 'week') {
+      d.setDate(d.getDate() + periodOffset * 7);
+    } else if (selection.period === 'year') {
+      d.setFullYear(d.getFullYear() + periodOffset);
+    } else {
+      d.setMonth(d.getMonth() + periodOffset);
+    }
+    return d;
+  }, [selection.period, periodOffset]);
+
+  const range = useMemo(() => periodRange(selection, referenceDate), [selection, referenceDate]);
 
   const window = useMemo(
     () => ({
@@ -71,12 +97,12 @@ export function InsightsScreen() {
   const breakdown: CategorySlice[] = useMemo(() => {
     if (!overview) return [];
 
-    // The endpoint returns only the top few categories, so the remainder here is
-    // taken from the period total rather than from the tail of this list — see
-    // the note in `toBreakdown`.
+    const categories = overview.categoryBreakdown ?? overview.topCategories;
+    const spent = overview.personalExpense ?? overview.totalExpenses;
+
     return toBreakdown(
-      overview.totalExpenses,
-      overview.topCategories.map((entry) => ({
+      spent,
+      categories.map((entry) => ({
         key: entry.categoryId ?? entry.name,
         label: entry.name,
         color: categoryColor(entry.color),
@@ -97,6 +123,11 @@ export function InsightsScreen() {
     setRangeOpen(true);
   }
 
+  function handlePeriodChange(next: Period) {
+    setPeriodOffset(0);
+    setSelection({ period: next });
+  }
+
   const movers = (overview?.categoryChanges ?? []).filter((entry) => entry.change !== 0).slice(0, 4);
 
   return (
@@ -114,16 +145,75 @@ export function InsightsScreen() {
           />
         }
       >
-        <PageHeader title="Insights" subtitle="What the numbers say" />
+        <PageHeader title="Insights" subtitle="Financial intelligence & analytics" />
 
-        <PeriodSelector
-          value={selection}
-          onChange={(period: Period) => setSelection({ period })}
-          onOpenCustom={openRangeSheet}
-          customLabel={range.label}
-        />
+        {/* Period Selector & Stepper */}
+        <View style={{ gap: theme.spacing.sm }}>
+          <PeriodSelector
+            value={selection}
+            onChange={handlePeriodChange}
+            onOpenCustom={openRangeSheet}
+            customLabel={range.label}
+          />
 
-        <View style={{ marginTop: theme.spacing.xl }}>
+          {selection.period !== 'custom' ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: theme.spacing.xs,
+                marginTop: 2,
+              }}
+            >
+              <IconButton
+                name="chevronLeft"
+                size="sm"
+                accessibilityLabel="Previous period"
+                onPress={() => {
+                  tapFeedback();
+                  setPeriodOffset((prev) => prev - 1);
+                }}
+              />
+              <Pressable
+                onPress={() => {
+                  tapFeedback();
+                  setPeriodOffset(0);
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: theme.spacing.md,
+                  paddingVertical: theme.spacing.xs,
+                  borderRadius: theme.radius.pill,
+                  backgroundColor: periodOffset !== 0 ? theme.colors.brandSurface : 'transparent',
+                }}
+              >
+                <Text variant="labelSm" tone={periodOffset !== 0 ? 'brand' : 'secondary'}>
+                  {range.label}
+                </Text>
+                {periodOffset !== 0 ? (
+                  <Text variant="caption" tone="brand">
+                    (Reset)
+                  </Text>
+                ) : null}
+              </Pressable>
+              <IconButton
+                name="chevronRight"
+                size="sm"
+                accessibilityLabel="Next period"
+                onPress={() => {
+                  tapFeedback();
+                  setPeriodOffset((prev) => prev + 1);
+                }}
+              />
+            </View>
+          ) : null}
+        </View>
+
+        {/* AI Period Summary Card */}
+        <View style={{ marginTop: theme.spacing.lg }}>
           <AiSummaryCard
             summary={aiQuery.data?.summary}
             loading={aiQuery.isLoading}
@@ -133,30 +223,39 @@ export function InsightsScreen() {
           />
         </View>
 
-        <View style={{ marginTop: theme.spacing.xxl }}>
+        <View style={{ marginTop: theme.spacing.xl }}>
           <QueryState
             isLoading={analyticsQuery.isLoading}
             error={analyticsQuery.error}
-            isEmpty={overview?.transactionCount === 0}
+            isEmpty={overview?.transactionCount === 0 && (!overview?.moneyLent && !overview?.moneyBorrowed)}
             onRetry={refresh}
             loadingFallback={
               <View style={{ gap: theme.spacing.md }}>
-                <Skeleton height={96} radius={theme.radius.lg} />
-                <Skeleton height={96} radius={theme.radius.lg} />
+                <Skeleton height={140} radius={theme.radius.xl} />
+                <Skeleton height={110} radius={theme.radius.xl} />
                 <Skeleton height={200} radius={theme.radius.xl} />
+                <Skeleton height={140} radius={theme.radius.xl} />
               </View>
             }
             empty={{
               icon: 'barChart',
               title: 'Nothing to analyse yet',
               description:
-                'Record a few transactions and this fills in with where your money actually goes.',
+                'Record a few transactions or obligations and this fills with deep financial intelligence.',
             }}
           >
             {overview ? (
               <>
-                <StatGrid overview={overview} />
+                {/* 1. Financial Summary: Personal Spending vs Income vs Cash Flow vs Movement */}
+                <SectionHeader title="Financial summary" />
+                <FinancialSummaryCard overview={overview} />
 
+                {/* Stat Grid */}
+                <View style={{ marginTop: theme.spacing.lg }}>
+                  <StatGrid overview={overview} />
+                </View>
+
+                {/* AI Observations / What stands out */}
                 {aiQuery.data && aiQuery.data.insights.length > 0 ? (
                   <View style={{ marginTop: theme.spacing.xxl }}>
                     <SectionHeader title="What stands out" />
@@ -168,31 +267,97 @@ export function InsightsScreen() {
                   </View>
                 ) : null}
 
+                {/* 2. Spending Trend (Daily / Weekly with Total, Average, Peak Day) */}
                 <View style={{ marginTop: theme.spacing.xxl }}>
-                  <SpendingOverview spent={overview.totalExpenses} breakdown={breakdown} />
+                  <SectionHeader title="Spending trend" />
+                  <SpendingTrendCard overview={overview} periodType={selection.period as any} />
                 </View>
 
-                {overview.weekly.length > 1 ? (
+                {/* 3. Spending by Category */}
+                <View style={{ marginTop: theme.spacing.xxl }}>
+                  <SpendingOverview
+                    spent={overview.personalExpense ?? overview.totalExpenses}
+                    breakdown={breakdown}
+                    onSeeAll={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
+                    onCategoryPress={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
+                  />
+                </View>
+
+                {/* 4. Top Merchants */}
+                {overview.topMerchants && overview.topMerchants.length > 0 ? (
                   <View style={{ marginTop: theme.spacing.xxl }}>
-                    <SectionHeader title="By week" />
-                    <Card radius="xl" padding="xl">
-                      <BarChart
-                        data={overview.weekly.map((bucket) => ({
-                          label: bucket.label,
-                          value: bucket.expense,
-                        }))}
-                        color={theme.colors.brand}
-                        height={96}
-                        gap={8}
-                        formatValue={formatCompactINR}
-                        accessibilityLabel={`Spending by week: ${overview.weekly
-                          .map((bucket) => `${bucket.label} ${formatINR(bucket.expense)}`)
-                          .join(', ')}`}
-                      />
-                    </Card>
+                    <SectionHeader title="Top merchants" />
+                    <TopMerchantsCard
+                      merchants={overview.topMerchants}
+                      totalExpenses={overview.personalExpense ?? overview.totalExpenses}
+                    />
                   </View>
                 ) : null}
 
+                {/* 5. Budget Analytics */}
+                {overview.budgetStatus?.hasBudgets ? (
+                  <View style={{ marginTop: theme.spacing.xxl }}>
+                    <SectionHeader
+                      title={`Budgets (${overview.budgetStatus.month})`}
+                      actionLabel="Manage"
+                      onActionPress={() => navigation.navigate('Tabs', { screen: 'Budgets' })}
+                    />
+                    <BudgetAnalyticsCard budgetStatus={overview.budgetStatus} />
+                  </View>
+                ) : null}
+
+                {/* 6. People / Money Owed Analytics */}
+                {overview.peopleSummary ? (
+                  <View style={{ marginTop: theme.spacing.xxl }}>
+                    <SectionHeader
+                      title="People & obligations"
+                      actionLabel="View all"
+                      onActionPress={() => navigation.navigate('People')}
+                    />
+                    <PeopleAnalyticsCard
+                      peopleSummary={overview.peopleSummary}
+                      onViewAll={() => navigation.navigate('People')}
+                      onPersonPress={(personId) => navigation.navigate('PersonDetail', { id: personId })}
+                    />
+                  </View>
+                ) : null}
+
+                {/* 7. Account Analytics */}
+                {overview.accountBreakdown && overview.accountBreakdown.length > 0 ? (
+                  <View style={{ marginTop: theme.spacing.xxl }}>
+                    <SectionHeader
+                      title="Money movement by account"
+                      actionLabel="Accounts"
+                      onActionPress={() => navigation.navigate('Accounts')}
+                    />
+                    <AccountAnalyticsCard accounts={overview.accountBreakdown} />
+                  </View>
+                ) : null}
+
+                {/* 8. Recurring Expense Analytics */}
+                {overview.recurringSummary ? (
+                  <View style={{ marginTop: theme.spacing.xxl }}>
+                    <SectionHeader
+                      title="Recurring expenses"
+                      actionLabel="Manage"
+                      onActionPress={() => navigation.navigate('Recurring')}
+                    />
+                    <RecurringAnalyticsCard recurringSummary={overview.recurringSummary} />
+                  </View>
+                ) : null}
+
+                {/* 9. Calendar Spending View */}
+                {overview.daily && overview.daily.length > 0 ? (
+                  <View style={{ marginTop: theme.spacing.xxl }}>
+                    <SectionHeader title="Calendar spending" />
+                    <CalendarSpendingCard
+                      daily={overview.daily}
+                      onDatePress={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
+                    />
+                  </View>
+                ) : null}
+
+                {/* 10. Biggest Changes vs Previous Period */}
                 {movers.length > 0 ? (
                   <View style={{ marginTop: theme.spacing.xxl }}>
                     <SectionHeader title="Biggest changes" />
@@ -244,6 +409,7 @@ export function InsightsScreen() {
                   </View>
                 ) : null}
 
+                {/* 11. Largest Single Expenses */}
                 {overview.largestExpenses.length > 0 ? (
                   <View style={{ marginTop: theme.spacing.xxl }}>
                     <SectionHeader title="Largest expenses" />
@@ -291,30 +457,6 @@ export function InsightsScreen() {
             ) : null}
           </QueryState>
         </View>
-
-        {/* The trend is its own window — six months regardless of the period
-            above, because "am I spending more than I used to" is not a question
-            about the week you happen to be looking at. */}
-        {trendQuery.data && trendQuery.data.some((bucket) => bucket.expense > 0) ? (
-          <View style={{ marginTop: theme.spacing.xxl }}>
-            <SectionHeader title="Last 6 months" />
-            <Card radius="xl" padding="xl">
-              <BarChart
-                data={trendQuery.data.map((bucket) => ({
-                  label: bucket.label,
-                  value: bucket.expense,
-                }))}
-                color={theme.colors.brandText}
-                height={110}
-                gap={8}
-                formatValue={formatCompactINR}
-                accessibilityLabel={`Monthly spending: ${trendQuery.data
-                  .map((bucket) => `${bucket.label} ${formatINR(bucket.expense)}`)
-                  .join(', ')}`}
-              />
-            </Card>
-          </View>
-        ) : null}
       </Screen>
 
       <DateRangeSheet
@@ -323,6 +465,7 @@ export function InsightsScreen() {
         value={selection}
         onClose={() => setRangeOpen(false)}
         onApply={(next) => {
+          setPeriodOffset(0);
           setSelection(next);
           setRangeOpen(false);
         }}

@@ -251,6 +251,14 @@ export function SettingsScreen() {
               />
               <Divider inset={DIVIDER_INSET} />
               <ListRow
+                title="People"
+                subtitle="Money owed, loans and repayments"
+                leading={<IconTile name="users" color={theme.colors.textTertiary} />}
+                showChevron
+                onPress={() => navigation.navigate('People')}
+              />
+              <Divider inset={DIVIDER_INSET} />
+              <ListRow
                 title="Alerts"
                 subtitle="Budget and recurring notifications"
                 leading={<IconTile name="bell" color={theme.colors.textTertiary} />}

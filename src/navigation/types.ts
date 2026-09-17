@@ -28,6 +28,8 @@ export type RootStackParamList = {
   Settings: undefined;
   AiChat: undefined;
   DesignSystem: undefined;
+  People: undefined;
+  PersonDetail: { id: string };
 };
 
 /**

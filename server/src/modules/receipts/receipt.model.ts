@@ -23,6 +23,17 @@ const extractedItemSchema = new Schema(
   { _id: false },
 );
 
+const confidenceDetailsSchema = new Schema(
+  {
+    merchant: { type: String, enum: ['high', 'needs_review', 'unresolved'], default: 'unresolved' },
+    amount: { type: String, enum: ['high', 'needs_review', 'unresolved'], default: 'unresolved' },
+    date: { type: String, enum: ['high', 'needs_review', 'unresolved'], default: 'unresolved' },
+    account: { type: String, enum: ['high', 'needs_review', 'unresolved'], default: 'unresolved' },
+    paymentMethod: { type: String, enum: ['high', 'needs_review', 'unresolved'], default: 'unresolved' },
+  },
+  { _id: false },
+);
+
 const extractionSchema = new Schema(
   {
     merchant: { type: String, default: '', maxlength: 120 },
@@ -30,9 +41,25 @@ const extractionSchema = new Schema(
     amount: { type: Number, default: null },
     /** The printed line the total was read from, so a person can check it. */
     amountText: { type: String, default: '', maxlength: 120 },
+    subtotal: { type: Number, default: null },
+    tax: { type: Number, default: null },
+    discount: { type: Number, default: null },
     date: { type: Date, default: null },
+    isDateDefault: { type: Boolean, default: false },
     items: { type: [extractedItemSchema], default: [] },
+    categoryHint: { type: String, default: null, maxlength: 60 },
+    accountHint: { type: String, default: null, maxlength: 60 },
     paymentMethod: { type: String, default: null },
+    suggestedCategoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+    suggestedAccountId: { type: Schema.Types.ObjectId, ref: 'Account', default: null },
+    accountStatus: {
+      type: String,
+      enum: ['resolved', 'suggested', 'unresolved'],
+      default: 'unresolved',
+    },
+    warnings: { type: [String], default: [] },
+    /** Field-specific confidence breakdown for UI badges. */
+    confidenceDetails: { type: confidenceDetailsSchema, default: () => ({}) },
     /** How much of the receipt was legible, by the model's own account. */
     confidence: { type: String, enum: ['high', 'medium', 'low'], default: 'low' },
     model: { type: String, default: '' },

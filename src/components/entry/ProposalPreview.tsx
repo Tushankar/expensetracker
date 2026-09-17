@@ -1,11 +1,11 @@
 import { Fragment } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import type { QuickEntryProposal } from '@/api';
 import { Badge, Button, Card, Divider, Icon, Text, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
-import { RUPEE, formatAmountInput, paiseToRupeeInput } from '@/utils/currency';
+import { RUPEE, formatAmountInput, formatINR, paiseToRupeeInput } from '@/utils/currency';
 import { formatDayLabel } from '@/utils/date';
 
 export type ProposalPreviewProps = {
@@ -15,6 +15,8 @@ export type ProposalPreviewProps = {
   methodLabel: string;
   onSave: () => void;
   onEdit: () => void;
+  onPickCategory?: () => void;
+  onPickAccount?: () => void;
   saving: boolean;
 };
 
@@ -28,15 +30,9 @@ const SOURCE_LABEL: Record<QuickEntryProposal['categorySource'], string> = {
 /**
  * What the app thinks you meant, before it writes anything down.
  *
- * The whole feature rests on this screen. A parser that is right nine times in ten
- * is delightful with a confirmation step and a slow-motion disaster without one —
- * the tenth entry is wrong, nobody notices, and it surfaces six weeks later as a
- * number in a chart that cannot be traced back to anything.
- *
- * So the amount is display-sized, every inferred field says where it came from,
- * and anything the parser was unsure about is stated in words rather than implied
- * by a colour. Save is disabled outright when there is no amount: offering to save
- * a blank is offering to save a mistake.
+ * The whole feature rests on this screen: nothing parsed is saved automatically.
+ * The amount is prominent, inferred fields show their source, and low-confidence
+ * categories prompt the user with "Select category".
  */
 export function ProposalPreview({
   proposal,
@@ -44,20 +40,39 @@ export function ProposalPreview({
   methodLabel,
   onSave,
   onEdit,
+  onPickCategory,
+  onPickAccount,
   saving,
 }: ProposalPreviewProps) {
   const theme = useTheme();
 
-  const canSave = proposal.amount !== null && Boolean(proposal.categoryId);
+  const canSave =
+    proposal.amount !== null &&
+    (Boolean(proposal.categoryId) || Boolean(proposal.obligation)) &&
+    Boolean(proposal.accountId);
 
-  const rows: { icon: IconName; label: string; value: string; hint?: string }[] = [
+  const rows: {
+    icon: IconName;
+    label: string;
+    value: string;
+    hint?: string;
+    isCategory?: boolean;
+    isAccount?: boolean;
+  }[] = [
     {
       icon: 'list',
       label: 'Category',
-      value: proposal.categoryName ?? 'Not set',
-      hint: proposal.categoryName ? proposal.categoryReason : 'Tap Edit to choose one',
+      value: proposal.categoryName ?? 'Select category',
+      hint: proposal.categoryName ? proposal.categoryReason : 'Tap to choose one',
+      isCategory: true,
     },
-    { icon: 'wallet', label: 'Account', value: accountName ?? proposal.accountName ?? 'Not set' },
+    {
+      icon: 'wallet',
+      label: 'Account',
+      value: accountName ?? proposal.accountName ?? 'Select account',
+      hint: !proposal.accountId ? 'Tap to choose one' : undefined,
+      isAccount: true,
+    },
     { icon: 'card', label: 'Method', value: methodLabel },
     {
       icon: 'calendar',
@@ -72,9 +87,11 @@ export function ProposalPreview({
       entering={FadeInDown.duration(theme.duration.base)}
       style={{ gap: theme.spacing.lg }}
     >
-      {/* The amount, at the size it deserves: it is the one field where being
-          wrong actually costs something. */}
+      {/* Detected Amount and Merchant */}
       <View style={{ alignItems: 'center', gap: theme.spacing.xs }}>
+        <Text variant="caption" tone="tertiary" style={{ letterSpacing: 0.5 }}>
+          DETECTED
+        </Text>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}>
           <Text variant="h2" tone="tertiary" style={{ marginTop: 6 }} maxFontSizeMultiplier={1.2}>
             {RUPEE}
@@ -112,7 +129,36 @@ export function ProposalPreview({
         />
       </View>
 
-      {proposal.warnings.length > 0 ? (
+      {proposal.possibleDuplicate ? (
+        <View
+          accessibilityLiveRegion="assertive"
+          style={{
+            gap: theme.spacing.xs,
+            padding: theme.spacing.md,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.warningSurface,
+            borderWidth: 1,
+            borderColor: theme.colors.warning,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+            <Icon name="alertTriangle" size={16} color={theme.colors.warning} />
+            <Text variant="labelSm" color={theme.colors.warning} style={{ fontWeight: '600' }}>
+              Possible duplicate
+            </Text>
+          </View>
+          <Text variant="caption" tone="secondary">
+            A similar transaction of {formatINR(proposal.possibleDuplicate.amount)}
+            {proposal.possibleDuplicate.merchant ? ` at ${proposal.possibleDuplicate.merchant}` : ''} was recorded{' '}
+            {proposal.possibleDuplicate.minutesAgo <= 1
+              ? 'just now'
+              : `${proposal.possibleDuplicate.minutesAgo} minutes ago`}
+            .
+          </Text>
+        </View>
+      ) : null}
+
+      {proposal.warnings.filter((w) => !w.startsWith('Similar transaction added')).length > 0 ? (
         <View
           accessibilityLiveRegion="polite"
           style={{
@@ -122,17 +168,19 @@ export function ProposalPreview({
             backgroundColor: theme.colors.warningSurface,
           }}
         >
-          {proposal.warnings.map((warning) => (
-            <View
-              key={warning}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
-            >
-              <Icon name="alertTriangle" size={14} color={theme.colors.warning} />
-              <Text variant="caption" color={theme.colors.warning} style={{ flex: 1 }}>
-                {warning}
-              </Text>
-            </View>
-          ))}
+          {proposal.warnings
+            .filter((w) => !w.startsWith('Similar transaction added'))
+            .map((warning) => (
+              <View
+                key={warning}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
+              >
+                <Icon name="alertTriangle" size={14} color={theme.colors.warning} />
+                <Text variant="caption" color={theme.colors.warning} style={{ flex: 1 }}>
+                  {warning}
+                </Text>
+              </View>
+            ))}
         </View>
       ) : null}
 
@@ -155,16 +203,113 @@ export function ProposalPreview({
                 <Text variant="caption" tone="tertiary" style={{ width: 72 }}>
                   {row.label}
                 </Text>
-                <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end', gap: 2 }}>
-                  <Text variant="labelSm" numberOfLines={1}>
-                    {row.value}
-                  </Text>
-                  {row.hint ? (
-                    <Text variant="caption" tone="tertiary" numberOfLines={1}>
-                      {row.hint}
+
+                {row.isAccount && onPickAccount ? (
+                  <Pressable
+                    onPress={onPickAccount}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      proposal.accountId
+                        ? `Account ${row.value}. Tap to change.`
+                        : 'Select account'
+                    }
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                      {proposal.accountId ? (
+                        <Text variant="labelSm" numberOfLines={1}>
+                          {row.value}
+                        </Text>
+                      ) : (
+                        <View
+                          style={{
+                            paddingHorizontal: theme.spacing.sm,
+                            paddingVertical: 3,
+                            borderRadius: theme.radius.sm,
+                            backgroundColor: theme.colors.warningSurface,
+                            borderWidth: theme.layout.hairline,
+                            borderColor: theme.colors.warning,
+                          }}
+                        >
+                          <Text variant="labelSm" color={theme.colors.warning}>
+                            Select account
+                          </Text>
+                        </View>
+                      )}
+                      {row.hint ? (
+                        <Text variant="caption" tone="tertiary" numberOfLines={1}>
+                          {row.hint}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
+                  </Pressable>
+                ) : row.isCategory && onPickCategory ? (
+                  <Pressable
+                    onPress={onPickCategory}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      proposal.categoryName
+                        ? `Category ${proposal.categoryName}. Tap to change.`
+                        : 'Select category'
+                    }
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                      {proposal.categoryName ? (
+                        <Text variant="labelSm" numberOfLines={1}>
+                          {proposal.categoryName}
+                        </Text>
+                      ) : (
+                        <View
+                          style={{
+                            paddingHorizontal: theme.spacing.sm,
+                            paddingVertical: 3,
+                            borderRadius: theme.radius.sm,
+                            backgroundColor: theme.colors.brandSurface,
+                            borderWidth: theme.layout.hairline,
+                            borderColor: theme.colors.brand,
+                          }}
+                        >
+                          <Text variant="labelSm" tone="brand">
+                            Select category
+                          </Text>
+                        </View>
+                      )}
+                      {row.hint ? (
+                        <Text variant="caption" tone="tertiary" numberOfLines={1}>
+                          {row.hint}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
+                  </Pressable>
+                ) : (
+                  <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end', gap: 2 }}>
+                    <Text variant="labelSm" numberOfLines={1}>
+                      {row.value}
                     </Text>
-                  ) : null}
-                </View>
+                    {row.hint ? (
+                      <Text variant="caption" tone="tertiary" numberOfLines={1}>
+                        {row.hint}
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
               </View>
             </Fragment>
           ))}
@@ -173,7 +318,7 @@ export function ProposalPreview({
 
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
         <Button
-          label="Edit"
+          label="Edit details"
           onPress={onEdit}
           variant="secondary"
           size="lg"
@@ -181,9 +326,19 @@ export function ProposalPreview({
           style={{ flex: 1 }}
         />
         <Button
-          label="Save"
+          label={
+            proposal.possibleDuplicate
+              ? 'Add anyway'
+              : proposal.obligation
+                ? proposal.obligation.direction === 'owed_to_me'
+                  ? 'Record loan'
+                  : 'Record borrowed'
+                : proposal.type === 'income'
+                  ? 'Add income'
+                  : 'Add expense'
+          }
           onPress={onSave}
-          variant="brand"
+          variant={proposal.type === 'income' ? 'primary' : 'brand'}
           size="lg"
           loading={saving}
           disabled={!canSave}
@@ -195,7 +350,9 @@ export function ProposalPreview({
         <Text variant="caption" tone="tertiary" align="center">
           {proposal.amount === null
             ? 'No amount was found, so there is nothing to save yet. Tap Edit to enter one.'
-            : 'Choose a category before saving.'}
+            : !proposal.accountId
+              ? 'Choose an account before saving.'
+              : 'Choose a category before saving.'}
         </Text>
       ) : null}
     </Animated.View>

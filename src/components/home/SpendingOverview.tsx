@@ -1,4 +1,4 @@
-import { useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { DonutChart } from '@/components/charts';
 import { Card, EmptyState, SectionHeader, Text } from '@/components/ui';
@@ -11,6 +11,7 @@ export type SpendingOverviewProps = {
   /** Largest first. Anything past the fifth is already folded into "Others". */
   breakdown: readonly CategorySlice[];
   onSeeAll?: () => void;
+  onCategoryPress?: (categoryKey: string, categoryLabel: string) => void;
 };
 
 /**
@@ -32,7 +33,12 @@ const PERCENT_COLUMN_MIN_WIDTH = 360;
  * Amounts sit beside the percentages because a share without a figure is not
  * actionable — "Food, 32%" does not tell you whether to worry.
  */
-export function SpendingOverview({ spent, breakdown, onSeeAll }: SpendingOverviewProps) {
+export function SpendingOverview({
+  spent,
+  breakdown,
+  onSeeAll,
+  onCategoryPress,
+}: SpendingOverviewProps) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const showPercent = width >= PERCENT_COLUMN_MIN_WIDTH;
@@ -88,50 +94,55 @@ export function SpendingOverview({ spent, breakdown, onSeeAll }: SpendingOvervie
             </DonutChart>
 
             <View style={{ flex: 1, minWidth: 0, gap: theme.spacing.sm }}>
-              {segments.map((segment) => (
-                <View
-                  key={segment.key}
-                  accessible
-                  accessibilityLabel={`${segment.label}, ${formatINR(segment.amount)}, ${segment.percent} percent`}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
-                >
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: segment.color,
-                    }}
-                  />
-                  <Text
-                    variant="caption"
-                    tone="secondary"
-                    numberOfLines={1}
-                    maxFontSizeMultiplier={1.2}
-                    style={{ flex: 1, minWidth: 0 }}
+              {segments.map((segment) => {
+                const RowComponent = onCategoryPress ? Pressable : View;
+                return (
+                  <RowComponent
+                    key={segment.key}
+                    onPress={onCategoryPress ? () => onCategoryPress(segment.key, segment.label) : undefined}
+                    accessible
+                    accessibilityRole={onCategoryPress ? 'button' : undefined}
+                    accessibilityLabel={`${segment.label}, ${formatINR(segment.amount)}, ${segment.percent} percent`}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
                   >
-                    {segment.label}
-                  </Text>
-                  <Text
-                    variant="caption"
-                    numberOfLines={1}
-                    maxFontSizeMultiplier={1.2}
-                  >
-                    {formatCompactINR(segment.amount)}
-                  </Text>
-                  {showPercent ? (
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: segment.color,
+                      }}
+                    />
                     <Text
                       variant="caption"
-                      tone="tertiary"
+                      tone="secondary"
+                      numberOfLines={1}
                       maxFontSizeMultiplier={1.2}
-                      // Fixed column keeps the percentages aligned down the legend.
-                      style={{ width: 32, textAlign: 'right' }}
+                      style={{ flex: 1, minWidth: 0 }}
                     >
-                      {`${segment.percent}%`}
+                      {segment.label}
                     </Text>
-                  ) : null}
-                </View>
-              ))}
+                    <Text
+                      variant="caption"
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.2}
+                    >
+                      {formatCompactINR(segment.amount)}
+                    </Text>
+                    {showPercent ? (
+                      <Text
+                        variant="caption"
+                        tone="tertiary"
+                        maxFontSizeMultiplier={1.2}
+                        // Fixed column keeps the percentages aligned down the legend.
+                        style={{ width: 32, textAlign: 'right' }}
+                      >
+                        {`${segment.percent}%`}
+                      </Text>
+                    ) : null}
+                  </RowComponent>
+                );
+              })}
             </View>
           </View>
         </Card>

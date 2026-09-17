@@ -4,7 +4,7 @@ import type { PaymentMethod, Transaction, TransactionType } from '@/api/types';
 
 export type EntrySheetState =
   | { mode: 'closed' }
-  | { mode: 'create'; type: TransactionType }
+  | { mode: 'create'; type: TransactionType; quickText?: string }
   | { mode: 'edit'; transaction: Transaction };
 
 /** A one-off confirmation. Null when nothing is being announced. */
@@ -26,7 +26,7 @@ type UiState = {
    * rather than over a blank one.
    */
   entrySession: number;
-  openAddSheet: (type?: TransactionType) => void;
+  openAddSheet: (type?: TransactionType, quickText?: string) => void;
   openEditSheet: (transaction: Transaction) => void;
   closeEntrySheet: () => void;
 
@@ -77,9 +77,9 @@ export const useUiStore = create<UiState>((set) => ({
   entrySheet: { mode: 'closed' },
   entrySession: 0,
 
-  openAddSheet: (type = 'expense') =>
+  openAddSheet: (type = 'expense' as TransactionType, quickText?: string) =>
     set((state) => ({
-      entrySheet: { mode: 'create', type },
+      entrySheet: { mode: 'create' as const, type, quickText },
       entrySession: state.entrySession + 1,
     })),
   openEditSheet: (transaction) =>

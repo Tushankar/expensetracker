@@ -6,9 +6,70 @@ import {
   monthRangeFromKey,
   zoneOrDefault,
 } from '../../lib/time';
+import { AccountModel } from '../accounts/account.model';
 import { getBudgetSummary, type BudgetSummary } from '../budgets/budget.service';
+import { MoneyOwedModel } from '../moneyOwed/moneyOwed.model';
+import { RepaymentModel } from '../moneyOwed/repayment.model';
+import { getPeopleSummary, listPeople } from '../people/people.service';
+import { RecurringModel } from '../recurring/recurring.model';
+import { listUpcoming, type PublicRecurring } from '../recurring/recurring.service';
 import { TransactionModel } from '../transactions/transaction.model';
 import { UserModel } from '../users/user.model';
+
+export type TopMerchant = {
+  merchant: string;
+  totalSpent: number;
+  count: number;
+};
+
+export type AccountAnalytics = {
+  accountId: string;
+  accountName: string;
+  type: string;
+  icon: string;
+  color: string;
+  spending: number;
+  incoming: number;
+  transfers: number;
+};
+
+export type PeopleAnalytics = {
+  totalOwedToMe: number;
+  totalIOwe: number;
+  netBalance: number;
+  activePeopleCount: number;
+  people: {
+    id: string;
+    name: string;
+    balance: number;
+    direction: 'they_owe' | 'i_owe' | 'settled';
+  }[];
+};
+
+export type RecurringAnalytics = {
+  estimatedMonthlyCost: number;
+  upcomingCount: number;
+  upcoming: PublicRecurring[];
+};
+
+export type MetricChange = {
+  amount: number;
+  percent: number | null;
+  direction: 'up' | 'down' | 'flat';
+  text: string;
+};
+
+export type BudgetItem = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  budgeted: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+  state: 'on_track' | 'warning' | 'exceeded';
+};
 
 /**
  * Every figure the dashboard and the assistant are allowed to state.
@@ -57,6 +118,27 @@ export type AnalyticsOverview = {
   daily: Bucket[];
 
   budgetStatus: BudgetStatus;
+
+  // Phase C: Core Accounting & Analytics Invariants
+  personalExpense: number;
+  income: number;
+  transfers: number;
+  moneyLent: number;
+  repaymentsReceived: number;
+  moneyBorrowed: number;
+  repaymentsMade: number;
+  netCashFlow: number;
+
+  spendingChange: MetricChange;
+  incomeChange: MetricChange;
+  transactionCountChange: MetricChange;
+
+  categoryBreakdown: CategoryTotal[];
+  dailySpending: Bucket[];
+  topMerchants: TopMerchant[];
+  accountBreakdown: AccountAnalytics[];
+  peopleSummary: PeopleAnalytics;
+  recurringSummary: RecurringAnalytics;
 };
 
 export type CategoryTotal = {
@@ -123,6 +205,7 @@ export type BudgetStatus = {
   /** Named so the assistant can talk about them without guessing. */
   exceededNames: string[];
   warningNames: string[];
+  items?: BudgetItem[];
 };
 
 type Range = { from: Date; to: Date };
@@ -144,6 +227,32 @@ function daysBetween(from: Date, to: Date): number {
 function percentChange(current: number, previous: number): number | null {
   if (previous === 0) return null;
   return Math.round(((current - previous) / Math.abs(previous)) * 1000) / 10;
+}
+
+function formatINRText(paise: number): string {
+  const whole = String(Math.round(Math.abs(paise) / 100));
+  const sign = paise < 0 ? '−' : '';
+  if (whole.length <= 3) return `${sign}₹${whole}`;
+  const last3 = whole.slice(-3);
+  const rest = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return `${sign}₹${rest},${last3}`;
+}
+
+function formatComparisonText(
+  current: number,
+  previous: number,
+  periodName = 'last period',
+): string {
+  if (previous === 0 && current === 0) return 'No previous-period data';
+  if (previous === 0) return `${formatINRText(current)} (No previous-period data)`;
+  if (current === previous) return `About the same as ${periodName}`;
+  const diff = current - previous;
+  const pct = percentChange(current, previous);
+  const pctText = pct !== null ? ` (${Math.abs(pct)}%)` : '';
+  if (diff > 0) {
+    return `${formatINRText(diff)} higher than ${periodName}${pctText}`;
+  }
+  return `${formatINRText(Math.abs(diff))} lower than ${periodName}${pctText}`;
 }
 
 /**
@@ -234,12 +343,13 @@ async function totalsForRange(
 ): Promise<{
   income: number;
   expenses: number;
+  transactionCount: number;
   byCategory: Map<string, number>;
 }> {
   const [rows, categories] = await Promise.all([
-    TransactionModel.aggregate<{ _id: string; amount: number }>([
+    TransactionModel.aggregate<{ _id: string; amount: number; count: number }>([
       { $match: { userId, date: { $gte: range.from, $lte: range.to } } },
-      { $group: { _id: '$type', amount: { $sum: '$amount' } } },
+      { $group: { _id: '$type', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
     TransactionModel.aggregate<{ _id: Types.ObjectId | null; amount: number }>([
       {
@@ -254,10 +364,12 @@ async function totalsForRange(
   ]);
 
   const find = (type: string) => rows.find((row) => row._id === type)?.amount ?? 0;
+  const transactionCount = rows.reduce((sum, row) => sum + row.count, 0);
 
   return {
     income: find('income'),
     expenses: find('expense'),
+    transactionCount,
     byCategory: new Map(
       categories.filter((row) => row._id).map((row) => [String(row._id), row.amount]),
     ),
@@ -292,10 +404,142 @@ export async function getOverview(
   const objectId = new Types.ObjectId(userId);
   const now = new Date();
 
-  const [facet, previousTotals, budgets] = await Promise.all([
+  const [
+    facet,
+    previousTotals,
+    budgets,
+    lentRows,
+    borrowedRows,
+    repaymentRows,
+    merchantRows,
+    accounts,
+    acctTx,
+    transferOut,
+    transferIn,
+    peopleList,
+    peopleSummaryData,
+    upcomingRules,
+    activeRecurringRules,
+  ] = await Promise.all([
     facetForRange(objectId, range, timezone),
     totalsForRange(objectId, previous),
     getBudgetSummary(userId, monthKey(range.from, timezone)),
+    MoneyOwedModel.aggregate<{ _id: null; total: number }>([
+      {
+        $match: {
+          userId: objectId,
+          direction: 'owed_to_me',
+          createdAt: { $gte: range.from, $lte: range.to },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$originalAmount' } } },
+    ]),
+    MoneyOwedModel.aggregate<{ _id: null; total: number }>([
+      {
+        $match: {
+          userId: objectId,
+          direction: 'i_owe',
+          createdAt: { $gte: range.from, $lte: range.to },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$originalAmount' } } },
+    ]),
+    RepaymentModel.aggregate<{ _id: string; total: number }>([
+      {
+        $match: {
+          userId: objectId,
+          date: { $gte: range.from, $lte: range.to },
+        },
+      },
+      {
+        $lookup: {
+          from: 'moneyoweds',
+          localField: 'moneyOwedId',
+          foreignField: '_id',
+          as: 'obligation',
+        },
+      },
+      { $unwind: '$obligation' },
+      {
+        $group: {
+          _id: '$obligation.direction',
+          total: { $sum: '$amount' },
+        },
+      },
+    ]),
+    TransactionModel.aggregate<{
+      _id: string;
+      merchantName: string;
+      totalSpent: number;
+      count: number;
+    }>([
+      {
+        $match: {
+          userId: objectId,
+          type: 'expense',
+          date: { $gte: range.from, $lte: range.to },
+          merchant: { $exists: true, $ne: '' },
+        },
+      },
+      {
+        $group: {
+          _id: { $toLower: { $trim: { input: '$merchant' } } },
+          merchantName: { $first: '$merchant' },
+          totalSpent: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { totalSpent: -1 } },
+      { $limit: 10 },
+    ]),
+    AccountModel.find({ userId: objectId, isActive: true }).lean(),
+    TransactionModel.aggregate<{
+      _id: { accountId: Types.ObjectId; type: string };
+      total: number;
+    }>([
+      {
+        $match: {
+          userId: objectId,
+          date: { $gte: range.from, $lte: range.to },
+        },
+      },
+      {
+        $group: {
+          _id: { accountId: '$accountId', type: '$type' },
+          total: { $sum: '$amount' },
+        },
+      },
+    ]),
+    TransactionModel.aggregate<{ _id: Types.ObjectId; total: number }>([
+      {
+        $match: {
+          userId: objectId,
+          type: 'transfer',
+          date: { $gte: range.from, $lte: range.to },
+        },
+      },
+      { $group: { _id: '$accountId', total: { $sum: '$amount' } } },
+    ]),
+    TransactionModel.aggregate<{ _id: Types.ObjectId; total: number }>([
+      {
+        $match: {
+          userId: objectId,
+          type: 'transfer',
+          destinationAccountId: { $ne: null },
+          date: { $gte: range.from, $lte: range.to },
+        },
+      },
+      { $group: { _id: '$destinationAccountId', total: { $sum: '$amount' } } },
+    ]),
+    listPeople(userId),
+    getPeopleSummary(userId),
+    listUpcoming(userId, 30, 5),
+    RecurringModel.find({
+      userId: objectId,
+      type: 'expense',
+      isActive: true,
+      isPaused: false,
+    }).lean(),
   ]);
 
   // ------------------------------------------------------------------ totals
@@ -433,6 +677,111 @@ export async function getOverview(
     count: row.count,
   }));
 
+  // ----------------------------------------------------------- Phase C additions
+  const moneyLent = lentRows[0]?.total ?? 0;
+  const moneyBorrowed = borrowedRows[0]?.total ?? 0;
+  const repaymentsReceived = repaymentRows.find((r) => r._id === 'owed_to_me')?.total ?? 0;
+  const repaymentsMade = repaymentRows.find((r) => r._id === 'i_owe')?.total ?? 0;
+  const netCashFlow =
+    totalIncome + moneyBorrowed + repaymentsReceived -
+    (totalExpenses + moneyLent + repaymentsMade);
+
+  const spendingChangeText = formatComparisonText(totalExpenses, previousTotals.expenses, label);
+  const incomeChangeText = formatComparisonText(totalIncome, previousTotals.income, label);
+  const txCountDiff = transactionCount - previousTotals.transactionCount;
+  const txCountPct = percentChange(transactionCount, previousTotals.transactionCount);
+  const txCountText =
+    previousTotals.transactionCount === 0
+      ? `${transactionCount} transactions (No previous-period data)`
+      : txCountDiff === 0
+        ? `About the same as ${label}`
+        : txCountDiff > 0
+          ? `${txCountDiff} more transactions than ${label}`
+          : `${Math.abs(txCountDiff)} fewer transactions than ${label}`;
+
+  const spendingChange: MetricChange = {
+    amount: Math.abs(expenseChange),
+    percent: percentChange(totalExpenses, previousTotals.expenses),
+    direction: expenseChange > 0 ? 'up' : expenseChange < 0 ? 'down' : 'flat',
+    text: spendingChangeText,
+  };
+
+  const incomeChange: MetricChange = {
+    amount: Math.abs(totalIncome - previousTotals.income),
+    percent: percentChange(totalIncome, previousTotals.income),
+    direction: totalIncome > previousTotals.income ? 'up' : totalIncome < previousTotals.income ? 'down' : 'flat',
+    text: incomeChangeText,
+  };
+
+  const transactionCountChange: MetricChange = {
+    amount: Math.abs(txCountDiff),
+    percent: txCountPct,
+    direction: txCountDiff > 0 ? 'up' : txCountDiff < 0 ? 'down' : 'flat',
+    text: txCountText,
+  };
+
+  const topMerchants: TopMerchant[] = merchantRows.map((r) => ({
+    merchant: r.merchantName,
+    totalSpent: r.totalSpent,
+    count: r.count,
+  }));
+
+  const accountBreakdown: AccountAnalytics[] = accounts.map((acc) => {
+    const idStr = String(acc._id);
+    const spending =
+      acctTx.find((t) => String(t._id.accountId) === idStr && t._id.type === 'expense')?.total ?? 0;
+    const incoming =
+      acctTx.find((t) => String(t._id.accountId) === idStr && t._id.type === 'income')?.total ?? 0;
+    const outTx = transferOut.find((t) => String(t._id) === idStr)?.total ?? 0;
+    const inTx = transferIn.find((t) => String(t._id) === idStr)?.total ?? 0;
+    return {
+      accountId: idStr,
+      accountName: acc.name,
+      type: acc.type,
+      icon: acc.icon,
+      color: acc.color,
+      spending,
+      incoming,
+      transfers: outTx + inTx,
+    };
+  });
+
+  const peopleSummary: PeopleAnalytics = {
+    totalOwedToMe: peopleSummaryData.totalOwedToMe,
+    totalIOwe: peopleSummaryData.totalIOwe,
+    netBalance: peopleSummaryData.netBalance,
+    activePeopleCount: peopleSummaryData.peopleCount,
+    people: peopleList.map((p) => {
+      const net = p.totalOwedToMe - p.totalIOwe;
+      return {
+        id: p.id,
+        name: p.name,
+        balance: Math.abs(net),
+        direction: net > 0 ? 'they_owe' : net < 0 ? 'i_owe' : 'settled',
+      };
+    }),
+  };
+
+  let estimatedMonthlyCost = 0;
+  for (const rule of activeRecurringRules) {
+    const interval = Math.max(1, rule.interval || 1);
+    if (rule.unit === 'month') {
+      estimatedMonthlyCost += Math.round(rule.amount / interval);
+    } else if (rule.unit === 'year') {
+      estimatedMonthlyCost += Math.round(rule.amount / (interval * 12));
+    } else if (rule.unit === 'week') {
+      estimatedMonthlyCost += Math.round((rule.amount * 52) / (interval * 12));
+    } else if (rule.unit === 'day') {
+      estimatedMonthlyCost += Math.round((rule.amount * 365) / (interval * 12));
+    }
+  }
+
+  const recurringSummary: RecurringAnalytics = {
+    estimatedMonthlyCost,
+    upcomingCount: upcomingRules.length,
+    upcoming: upcomingRules,
+  };
+
   return {
     period: {
       from: range.from.toISOString(),
@@ -458,11 +807,43 @@ export async function getOverview(
     weekly,
     daily,
     budgetStatus: toBudgetStatus(budgets),
+
+    // Phase C
+    personalExpense: totalExpenses,
+    income: totalIncome,
+    transfers: transferred,
+    moneyLent,
+    repaymentsReceived,
+    moneyBorrowed,
+    repaymentsMade,
+    netCashFlow,
+
+    spendingChange,
+    incomeChange,
+    transactionCountChange,
+
+    categoryBreakdown: topCategories,
+    dailySpending: daily,
+    topMerchants,
+    accountBreakdown,
+    peopleSummary,
+    recurringSummary,
   };
 }
 
 function toBudgetStatus(summary: BudgetSummary): BudgetStatus {
   const all = [...(summary.overall ? [summary.overall] : []), ...summary.categories];
+  const items: BudgetItem[] = summary.categories.map((c) => ({
+    id: c.id,
+    name: c.categoryName ?? 'Uncategorised',
+    icon: c.categoryIcon,
+    color: c.categoryColor,
+    budgeted: c.amount,
+    spent: c.spent,
+    remaining: c.remaining,
+    percent: c.percent,
+    state: c.state,
+  }));
 
   return {
     month: summary.month,
@@ -482,6 +863,7 @@ function toBudgetStatus(summary: BudgetSummary): BudgetStatus {
     warningNames: all
       .filter((budget) => budget.state === 'warning')
       .map((budget) => budget.categoryName ?? 'Your monthly budget'),
+    items,
   };
 }
 
@@ -674,3 +1056,54 @@ export async function getDayTotal(
 
   return { key, amount: rows[0]?.amount ?? 0, count: rows[0]?.count ?? 0 };
 }
+
+/** Specific merchant's spending and count for the period. */
+export async function getMerchantSpend(
+  userId: string,
+  merchantName: string,
+  range: Range,
+): Promise<{ merchant: string; amount: number; count: number; transactions: LargeTransaction[] }> {
+  const objectId = new Types.ObjectId(userId);
+  const trimmed = merchantName.trim();
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escaped, 'i');
+
+  const [totals, rows] = await Promise.all([
+    TransactionModel.aggregate<{ _id: null; amount: number; count: number }>([
+      {
+        $match: {
+          userId: objectId,
+          type: 'expense',
+          merchant: { $regex: pattern },
+          date: { $gte: range.from, $lte: range.to },
+        },
+      },
+      { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    TransactionModel.find({
+      userId: objectId,
+      type: 'expense',
+      merchant: { $regex: pattern },
+      date: { $gte: range.from, $lte: range.to },
+    })
+      .sort({ amount: -1 })
+      .limit(5)
+      .select('amount merchant date categoryId')
+      .populate<{ categoryId: { name: string } | null }>('categoryId', 'name')
+      .lean(),
+  ]);
+
+  return {
+    merchant: rows[0]?.merchant || trimmed,
+    amount: totals[0]?.amount ?? 0,
+    count: totals[0]?.count ?? 0,
+    transactions: rows.map((row) => ({
+      id: String(row._id),
+      amount: row.amount,
+      merchant: row.merchant || 'Expense',
+      categoryName: (row.categoryId as { name: string } | null)?.name ?? null,
+      date: row.date.toISOString(),
+    })),
+  };
+}
+

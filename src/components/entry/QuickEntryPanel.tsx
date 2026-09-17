@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, View, type TextInput } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -11,6 +11,8 @@ export type QuickEntryPanelProps = {
   onSubmit: (text: string) => void;
   loading: boolean;
   error: unknown;
+  /** Pre-fill from the Home Quick Add bar. Auto-submits on mount when present. */
+  initialText?: string;
 };
 
 /** Longer than this is a note, not a shorthand. Matches the server's own cap. */
@@ -27,10 +29,19 @@ const MAX_LENGTH = 160;
  * Nothing here saves anything. Submitting produces a preview, which is where the
  * decision is made.
  */
-export function QuickEntryPanel({ onSubmit, loading, error }: QuickEntryPanelProps) {
+export function QuickEntryPanel({ onSubmit, loading, error, initialText }: QuickEntryPanelProps) {
   const theme = useTheme();
   const inputRef = useRef<TextInput>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
+  const autoSubmitted = useRef(false);
+
+  // Auto-submit when opened with text from the Home bar
+  useEffect(() => {
+    if (initialText && initialText.trim() && !autoSubmitted.current) {
+      autoSubmitted.current = true;
+      onSubmit(initialText.trim());
+    }
+  }, [initialText, onSubmit]);
 
   const canSubmit = text.trim().length > 0 && !loading;
 
@@ -46,8 +57,8 @@ export function QuickEntryPanel({ onSubmit, loading, error }: QuickEntryPanelPro
       <Input
         ref={inputRef}
         autoFocus
-        label="Type it"
-        placeholder="Petrol 1200"
+        label="What did you spend?"
+        placeholder="e.g. Petrol 1200, Zomato 450"
         value={text}
         onChangeText={setText}
         maxLength={MAX_LENGTH}

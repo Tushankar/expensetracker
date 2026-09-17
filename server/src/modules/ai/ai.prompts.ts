@@ -91,7 +91,10 @@ export type FactSection =
   | 'categories'
   | 'largest'
   | 'comparison'
-  | 'budgets';
+  | 'budgets'
+  | 'merchants'
+  | 'people'
+  | 'cashFlow';
 
 /** Everything. The summary and the insight cards draw on all of it. */
 export const ALL_SECTIONS: readonly FactSection[] = [
@@ -100,6 +103,9 @@ export const ALL_SECTIONS: readonly FactSection[] = [
   'largest',
   'comparison',
   'budgets',
+  'merchants',
+  'people',
+  'cashFlow',
 ];
 
 export function buildFactSheet(
@@ -219,27 +225,63 @@ export function buildFactSheet(
     }
   }
 
-  if (!include.has('budgets')) return lines.join('\n');
+  if (include.has('budgets')) {
+    lines.push('');
+    if (!budget.hasBudgets) {
+      lines.push('BUDGETS: none set up.');
+    } else {
+      lines.push(`BUDGETS for ${budget.month}:`);
+      lines.push(`  Total budgeted across categories: ${rupees(budget.totalBudgeted)}`);
+      lines.push(`  Spent in that month: ${rupees(budget.totalSpent)}`);
+      if (budget.overallPercent !== null) {
+        lines.push(`  Overall budget used: ${percent(budget.overallPercent)}`);
+      }
+      lines.push(
+        `  ${budget.onTrack} on track, ${budget.warning} close to the limit, ${budget.exceeded} over`,
+      );
+      if (budget.exceededNames.length > 0) {
+        lines.push(`  Over budget: ${budget.exceededNames.join(', ')}`);
+      }
+      if (budget.warningNames.length > 0) {
+        lines.push(`  Close to the limit: ${budget.warningNames.join(', ')}`);
+      }
+    }
+  }
 
-  lines.push('');
-  if (!budget.hasBudgets) {
-    lines.push('BUDGETS: none set up.');
-  } else {
-    lines.push(`BUDGETS for ${budget.month}:`);
-    lines.push(`  Total budgeted across categories: ${rupees(budget.totalBudgeted)}`);
-    lines.push(`  Spent in that month: ${rupees(budget.totalSpent)}`);
-    if (budget.overallPercent !== null) {
-      lines.push(`  Overall budget used: ${percent(budget.overallPercent)}`);
+  if (include.has('merchants') && overview.topMerchants && overview.topMerchants.length > 0) {
+    lines.push('');
+    lines.push('TOP MERCHANTS:');
+    for (let i = 0; i < Math.min(5, overview.topMerchants.length); i++) {
+      const m = overview.topMerchants[i];
+      if (m) {
+        lines.push(`  ${i + 1}. ${m.merchant}: ${rupees(m.totalSpent)} (${m.count} transactions)`);
+      }
     }
-    lines.push(
-      `  ${budget.onTrack} on track, ${budget.warning} close to the limit, ${budget.exceeded} over`,
-    );
-    if (budget.exceededNames.length > 0) {
-      lines.push(`  Over budget: ${budget.exceededNames.join(', ')}`);
+  }
+
+  if (include.has('people') && overview.peopleSummary) {
+    lines.push('');
+    lines.push('PEOPLE / MONEY OWED:');
+    lines.push(`  You are owed: ${rupees(overview.peopleSummary.totalOwedToMe)}`);
+    lines.push(`  You owe others: ${rupees(overview.peopleSummary.totalIOwe)}`);
+    lines.push(`  Net balance: ${rupees(overview.peopleSummary.netBalance)}`);
+    const active = overview.peopleSummary.people.filter((p) => p.balance > 0);
+    if (active.length > 0) {
+      lines.push('  People balances:');
+      for (const p of active.slice(0, 5)) {
+        lines.push(`    - ${p.name}: ${p.direction === 'they_owe' ? 'owes you' : 'you owe'} ${rupees(p.balance)}`);
+      }
     }
-    if (budget.warningNames.length > 0) {
-      lines.push(`  Close to the limit: ${budget.warningNames.join(', ')}`);
-    }
+  }
+
+  if (include.has('cashFlow')) {
+    lines.push('');
+    lines.push('MONEY MOVEMENT:');
+    lines.push(`  Money lent: ${rupees(overview.moneyLent)}`);
+    lines.push(`  Money borrowed: ${rupees(overview.moneyBorrowed)}`);
+    lines.push(`  Repayments received: ${rupees(overview.repaymentsReceived)}`);
+    lines.push(`  Repayments made: ${rupees(overview.repaymentsMade)}`);
+    lines.push(`  Net cash flow: ${rupees(overview.netCashFlow)}`);
   }
 
   return lines.join('\n');

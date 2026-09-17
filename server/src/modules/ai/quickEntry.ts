@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 
 import { PAYMENT_METHODS, type PaymentMethod } from '../transactions/transaction.model';
+import { matchDirectCategory, matchIndianMerchant } from './knowledge/indianKnowledge';
 
 /**
  * Turning "Petrol 1200" into a transaction, without a model touching the money.
@@ -235,7 +236,83 @@ export type QuickParse = {
   date: ParsedDate;
   method: ParsedMethod;
   merchant: string;
+  categoryHint?: string | null;
+  categoryGroup?: string | null;
+  categoryAliases?: string[];
+  ruleConfidence?: 'high' | 'medium' | 'low';
+  obligation?: {
+    personName: string;
+    direction: 'owed_to_me' | 'i_owe';
+    type: 'loan' | 'paid_for' | 'borrowed';
+  } | null;
+  /** A raw account name fragment (e.g. "HDFC") to fuzzy-match against user accounts. */
+  accountHint?: string | null;
+  /** True when the phrasing looks like income rather than an expense. */
+  incomeIntent?: boolean;
 };
+
+/**
+ * Extracts a likely account name from the input.
+ *
+ * Recognises patterns like:
+ *   "HDFC Zomato 450"       → "HDFC"
+ *   "Zomato 450 from HDFC"  → "HDFC"
+ *   "Amazon 2500 ICICI"     → "ICICI"
+ *   "SBI credit card"       → "SBI"  (only when followed by card/account)
+ *
+ * Returns the raw hint string. Matching against the user's actual accounts
+ * happens in quick.service.ts — this function never touches the database.
+ */
+const ACCOUNT_KEYWORDS = [
+  'hdfc', 'icici', 'sbi', 'axis', 'kotak', 'bob', 'pnb', 'canara', 'idbi',
+  'yes bank', 'indusind', 'federal', 'rbl', 'idfc', 'bandhan', 'au bank',
+  'paytm', 'fi', 'jupiter', 'niyo', 'cred',
+];
+
+export function parseAccountHint(input: string): string | null {
+  const text = input.toLowerCase();
+
+  // 1. Keyword anywhere in the input with word boundaries (e.g. "HDFC Zomato 450", "Amazon 2000 ICICI")
+  for (const keyword of ACCOUNT_KEYWORDS) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+    if (regex.test(text)) {
+      return keyword;
+    }
+  }
+
+  // 2. Explicit account prepositions (from/using/via/through) followed by an account name
+  const prefixMatch = /\b(?:from|using|via|through)\s+(?:my\s+)?([a-z0-9][a-z0-9\s]{1,20})\b/i.exec(text);
+  if (prefixMatch?.[1]) {
+    const candidate = prefixMatch[1].trim();
+    const firstWord = candidate.split(/\s+/)[0];
+    if (
+      firstWord &&
+      !/^(?:the|a|an|me|here|there|cash|card|upi|rs|inr|zomato|swiggy|uber|amazon|flipkart|petrol)$/i.test(firstWord)
+    ) {
+      return firstWord;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detects income intent from phrasing.
+ *
+ * Recognises: "Salary 50000", "Earned 5000", "Freelance 10000",
+ * "Got paid 25000", "Interest 500", "Bonus 10000".
+ *
+ * Does NOT fire for ambiguous phrasing — "paid 1200" without "got" is an
+ * expense, not income, because that is what people mean 99% of the time.
+ */
+const INCOME_PATTERN =
+  /\b(salary|earned|earnings?|freelance|interest|dividend|bonus|stipend|refund|cashback|got\s+paid|received|credited)\b/i;
+
+export function parseIncomeIntent(input: string): boolean {
+  // Obligations take priority — "got paid by Rahul" could be a repayment
+  if (/\b(lent|loaned|owes?|borrowed|paid\s+for)\b/i.test(input)) return false;
+  return INCOME_PATTERN.test(input);
+}
 
 /** Blanks out the first occurrence of a fragment, leaving a separator behind. */
 function strip(text: string, fragment: string | null | undefined): string {
@@ -243,6 +320,55 @@ function strip(text: string, fragment: string | null | undefined): string {
   const at = text.toLowerCase().indexOf(fragment.toLowerCase());
   if (at === -1) return text;
   return `${text.slice(0, at)} ${text.slice(at + fragment.length)}`;
+}
+
+/**
+ * Deterministic detection of person / money owed intents:
+ * 1. "Lent Rahul 5000" / "Lent 5000 to Rahul"
+ * 2. "Rahul owes me 5000"
+ * 3. "Paid 1200 for Priya" / "Paid for Priya 1200"
+ * 4. "Priya paid me 1000" / "Rahul returned 1000"
+ * 5. "I borrowed 3000 from Amit" / "Borrowed 3000 from Amit"
+ */
+function parsePersonObligation(input: string): {
+  personName: string;
+  direction: 'owed_to_me' | 'i_owe';
+  type: 'loan' | 'paid_for' | 'borrowed';
+} | null {
+  const trimmed = input.trim();
+
+  // "Lent Rahul 5000" or "Lent to Rahul 5000" or "Lent 5000 to Rahul"
+  const lentMatch =
+    /^(?:i\s+)?(?:lent|loaned|gave\s+loan\s+to)\s+(?:to\s+)?([a-zA-Z]+)(?:\s+.*)?$/i.exec(trimmed) ??
+    /^(?:i\s+)?(?:lent|loaned)\s+.*?\s+(?:to\s+)?([a-zA-Z]+)$/i.exec(trimmed);
+  if (lentMatch?.[1] && !/^(?:rs|inr|money|cash|\d+)$/i.test(lentMatch[1])) {
+    return { personName: lentMatch[1], direction: 'owed_to_me', type: 'loan' };
+  }
+
+  // "Rahul owes me 5000" or "Rahul owes 5000"
+  const owesMatch = /^([a-zA-Z]+)\s+owes(?:\s+me)?(?:\s+.*)?$/i.exec(trimmed);
+  if (owesMatch?.[1] && !/^(?:he|she|who|i|they)$/i.test(owesMatch[1])) {
+    return { personName: owesMatch[1], direction: 'owed_to_me', type: 'loan' };
+  }
+
+  // "Paid 1200 for Priya" or "Paid for Priya 1200"
+  const paidForMatch =
+    /(?:paid|spent|bought)\s+.*?\s+for\s+([a-zA-Z]+)/i.exec(trimmed) ??
+    /(?:paid|spent)\s+for\s+([a-zA-Z]+)/i.exec(trimmed);
+  if (paidForMatch?.[1] && !/^(?:dinner|lunch|food|tea|coffee|movie|uber|petrol|\d+)$/i.test(paidForMatch[1])) {
+    return { personName: paidForMatch[1], direction: 'owed_to_me', type: 'paid_for' };
+  }
+
+  // "I borrowed 3000 from Amit" or "Borrowed from Amit 3000" or "Amit gave me 5000"
+  const borrowMatch =
+    /(?:borrowed|took\s+loan)\s+.*?\s+from\s+([a-zA-Z]+)/i.exec(trimmed) ??
+    /(?:borrowed|took\s+loan)\s+from\s+([a-zA-Z]+)/i.exec(trimmed) ??
+    /^([a-zA-Z]+)\s+gave\s+me\s+/i.exec(trimmed);
+  if (borrowMatch?.[1] && !/^(?:bank|atm|friend|\d+)$/i.test(borrowMatch[1])) {
+    return { personName: borrowMatch[1], direction: 'i_owe', type: 'borrowed' };
+  }
+
+  return null;
 }
 
 /**
@@ -263,9 +389,58 @@ export function parseQuickEntry(input: string, zone: string, now = new Date()): 
   const money = strip(strip(trimmed, date.text), method?.text);
   const amount = parseAmount(money);
 
-  const merchant = extractMerchant(trimmed, [amount?.text, date.text, method?.text]);
+  const obligation = parsePersonObligation(trimmed);
+  const accountHint = parseAccountHint(trimmed);
+  const incomeIntent = !obligation && parseIncomeIntent(trimmed);
 
-  return { amount, date, method, merchant };
+  const extracted = extractMerchant(trimmed, [amount?.text, date.text, method?.text, accountHint]);
+
+  // Check Indian knowledge base for known merchants
+  const knownMerchant = matchIndianMerchant(extracted);
+  // Check direct category keywords (e.g. "Petrol 1200", "Coffee 180", "Cigarettes 220")
+  const directCategory = matchDirectCategory(extracted);
+
+  let merchant = extracted;
+  let categoryHint: string | null = null;
+  let categoryGroup: string | null = null;
+  let categoryAliases: string[] | undefined = undefined;
+  let ruleConfidence: 'high' | 'medium' | 'low' = 'low';
+
+  if (obligation) {
+    ruleConfidence = 'high';
+    categoryHint = obligation.type === 'paid_for' ? 'Shopping' : null;
+    merchant = obligation.personName;
+  } else if (knownMerchant) {
+    merchant = knownMerchant.canonicalName;
+    categoryHint = knownMerchant.categoryName;
+    categoryGroup = knownMerchant.categoryGroup;
+    categoryAliases = [knownMerchant.categoryName];
+    ruleConfidence = 'high';
+  } else if (directCategory) {
+    // If the input was solely a category keyword like "Petrol 1200", don't fabricate a merchant
+    const cleanWord = extracted.toLowerCase().trim();
+    if (directCategory.pattern.test(cleanWord)) {
+      merchant = '';
+    }
+    categoryHint = directCategory.categoryName;
+    categoryGroup = directCategory.categoryGroup;
+    categoryAliases = directCategory.aliases;
+    ruleConfidence = 'high';
+  }
+
+  return {
+    amount,
+    date,
+    method,
+    merchant,
+    categoryHint,
+    categoryGroup,
+    categoryAliases,
+    ruleConfidence,
+    obligation,
+    accountHint,
+    incomeIntent,
+  };
 }
 
 export function isPaymentMethod(value: string): value is PaymentMethod {

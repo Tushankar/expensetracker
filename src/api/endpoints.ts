@@ -515,3 +515,98 @@ export const dataApi = {
     }).then((data) => data.deleted);
   },
 };
+
+// ------------------------------------------------------------------- Phase B.5
+
+export const peopleApi = {
+  list(search?: string) {
+    return requestData<{ people: import('./types').Person[] }>('/people', {
+      params: search ? { search } : undefined,
+    }).then((data) => data.people);
+  },
+
+  summary() {
+    return requestData<{ summary: import('./types').PeopleSummary }>('/people/summary').then(
+      (data) => data.summary,
+    );
+  },
+
+  get(id: string) {
+    return requestData<{ person: import('./types').Person }>(`/people/${id}`).then(
+      (data) => data.person,
+    );
+  },
+
+  create(input: import('./types').CreatePersonInput) {
+    return requestData<{ person: import('./types').Person }>('/people', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.person);
+  },
+
+  update(id: string, patch: Partial<import('./types').CreatePersonInput>) {
+    return requestData<{ person: import('./types').Person }>(`/people/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    }).then((data) => data.person);
+  },
+
+  delete(id: string) {
+    return request(`/people/${id}`, { method: 'DELETE' });
+  },
+};
+
+export const moneyOwedApi = {
+  list(filters?: { personId?: string; direction?: string; status?: string }) {
+    return requestData<{ obligations: import('./types').MoneyOwed[] }>('/money-owed', {
+      params: filters,
+    }).then((data) => data.obligations);
+  },
+
+  get(id: string) {
+    return requestData<{ obligation: import('./types').MoneyOwed }>(`/money-owed/${id}`).then(
+      (data) => data.obligation,
+    );
+  },
+
+  create(input: import('./types').CreateMoneyOwedInput) {
+    return requestData<{ obligation: import('./types').MoneyOwed }>('/money-owed', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.obligation);
+  },
+
+  update(id: string, patch: { purpose?: string; dueDate?: string | null; note?: string }) {
+    return requestData<{ obligation: import('./types').MoneyOwed }>(`/money-owed/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    }).then((data) => data.obligation);
+  },
+
+  delete(id: string) {
+    return request(`/money-owed/${id}`, { method: 'DELETE' });
+  },
+
+  recordRepayment(id: string, input: import('./types').RecordRepaymentInput) {
+    return requestData<{
+      obligation: import('./types').MoneyOwed;
+      repayment: import('./types').Repayment;
+    }>(`/money-owed/${id}/repayments`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  listRepayments(id: string) {
+    return requestData<{ repayments: import('./types').Repayment[] }>(
+      `/money-owed/${id}/repayments`,
+    ).then((data) => data.repayments);
+  },
+
+  writeOff(id: string, note?: string) {
+    return requestData<{ obligation: import('./types').MoneyOwed }>(`/money-owed/${id}/write-off`, {
+      method: 'POST',
+      body: { note },
+    }).then((data) => data.obligation);
+  },
+};

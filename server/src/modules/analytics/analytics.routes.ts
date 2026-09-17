@@ -1,8 +1,16 @@
 import { Router } from 'express';
 
+import {
+  dayRange,
+  monthRange,
+  weekRange,
+  yearRange,
+  zoneOrDefault,
+} from '../../lib/time';
 import { ok } from '../../lib/response';
 import { currentUser, requireAuth } from '../../middleware/auth';
 import { validate, validatedQuery } from '../../middleware/validate';
+import { UserModel } from '../users/user.model';
 
 import {
   overviewSchema,
@@ -27,18 +35,60 @@ analyticsRouter.use(requireAuth);
  */
 analyticsRouter.get('/overview', validate({ query: overviewSchema }), async (req, res) => {
   const query = validatedQuery<OverviewQuery>(res);
+  const userId = currentUser(req).id;
+  const user = await UserModel.findById(userId).select('timezone').lean();
+  const timezone = zoneOrDefault(user?.timezone);
+
+  let fromDate: Date;
+  let toDate: Date;
+  let label = query.label ?? 'this period';
+
+  const now = new Date();
+  if (query.period === 'week') {
+    const range = weekRange(now, timezone);
+    fromDate = range.from;
+    toDate = range.to;
+    label = query.label ?? 'this week';
+  } else if (query.period === 'month') {
+    const range = monthRange(now, timezone);
+    fromDate = range.from;
+    toDate = range.to;
+    label = query.label ?? 'this month';
+  } else if (query.period === 'year') {
+    const range = yearRange(now, timezone);
+    fromDate = range.from;
+    toDate = range.to;
+    label = query.label ?? 'this year';
+  } else if (query.period === 'day') {
+    const range = dayRange(now, timezone);
+    fromDate = range.from;
+    toDate = range.to;
+    label = query.label ?? 'today';
+  } else {
+    const rawFrom = query.from ?? query.startDate;
+    const rawTo = query.to ?? query.endDate;
+    if (rawFrom && rawTo) {
+      fromDate = rawFrom;
+      toDate = rawTo;
+    } else {
+      const range = monthRange(now, timezone);
+      fromDate = range.from;
+      toDate = range.to;
+      label = query.label ?? 'this month';
+    }
+  }
 
   // Falls back to the window of equal length immediately before, which is the
   // only honest default for an arbitrary range.
-  const span = query.to.getTime() - query.from.getTime();
-  const previousTo = query.previousTo ?? new Date(query.from.getTime() - 1);
+  const span = toDate.getTime() - fromDate.getTime();
+  const previousTo = query.previousTo ?? new Date(fromDate.getTime() - 1);
   const previousFrom = query.previousFrom ?? new Date(previousTo.getTime() - span);
 
   const overview = await getOverview(
-    currentUser(req).id,
-    { from: query.from, to: query.to },
+    userId,
+    { from: fromDate, to: toDate },
     { from: previousFrom, to: previousTo },
-    query.label,
+    label,
   );
 
   ok(res, { overview });

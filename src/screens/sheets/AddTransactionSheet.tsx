@@ -8,6 +8,7 @@ import {
   useAttachReceipt,
   useCategories,
   useCreateTransaction,
+  useCreateMoneyOwed,
   useDeleteReceipt,
   useExtractReceipt,
   useParseQuickEntry,
@@ -133,8 +134,10 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
 
   const editing = sheet.mode === 'edit' ? sheet.transaction : null;
   const open = sheet.mode !== 'closed';
+  const quickText = sheet.mode === 'create' ? sheet.quickText : undefined;
 
-  const [step, setStep] = useState<Step>('form');
+  const [step, setStep] = useState<Step>(quickText ? 'quick' : 'form');
+  const [returnToPreview, setReturnToPreview] = useState(false);
   const [type, setType] = useState<TransactionType>(
     sheet.mode === 'edit' ? sheet.transaction.type : sheet.mode === 'create' ? sheet.type : 'expense',
   );
@@ -326,6 +329,10 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
       {
         onSuccess: (result) => {
           setProposal(result);
+          // Respect the parser's income intent detection
+          if (result.type && result.type !== type) {
+            setType(result.type);
+          }
           // A parse with no amount is not a result worth previewing — it goes
           // straight to the form with whatever it did find, which is faster than
           // showing someone a confirmation card with a dash on it.
@@ -351,15 +358,48 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
    * entry. A shortcut that wrote directly would be a second code path to keep
    * correct, and the one that gets it wrong is always the one used less.
    */
-  async function saveProposal() {
-    if (!proposal || proposal.amount === null || !proposal.categoryId) return;
+  const createMoneyOwed = useCreateMoneyOwed();
 
-    const accountForSave = proposal.accountId ?? accountId;
+  async function saveProposal() {
+    if (!proposal || proposal.amount === null) return;
+
+    const accountForSave = proposal.accountId;
     if (!accountForSave) return fail('Pick an account');
 
     try {
+      if (proposal.obligation) {
+        // Tracked as a financial obligation without polluting expense/income analytics
+        await createMoneyOwed.mutateAsync({
+          personName: proposal.obligation.personName,
+          direction: proposal.obligation.direction,
+          type: proposal.obligation.type,
+          amount: proposal.amount,
+          purpose:
+            proposal.obligation.type === 'loan'
+              ? 'Loan'
+              : proposal.obligation.type === 'paid_for'
+                ? `Paid for ${proposal.obligation.personName}`
+                : 'Borrowed',
+          accountId: accountForSave,
+          categoryId: proposal.categoryId,
+        });
+
+        successFeedback();
+        showToast({
+          message:
+            proposal.obligation.direction === 'owed_to_me'
+              ? `${proposal.obligation.personName} owes you ${formatINR(proposal.amount)}`
+              : `You owe ${proposal.obligation.personName} ${formatINR(proposal.amount)}`,
+          tone: 'success',
+        });
+        handleClose();
+        return;
+      }
+
+      if (!proposal.categoryId) return;
+
       const createdTransaction = await createMutation.mutateAsync({
-        type: type === 'transfer' ? 'expense' : type,
+        type: proposal.type ?? (type === 'transfer' ? 'expense' : type),
         amount: proposal.amount,
         accountId: accountForSave,
         categoryId: proposal.categoryId,
@@ -478,6 +518,82 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
     setStep('form');
   }
 
+  async function retryExtract() {
+    if (!receipt) return;
+    try {
+      const read = await extractReceipt.mutateAsync(receipt.id);
+      setReceipt(read);
+      successFeedback();
+    } catch {
+      errorFeedback();
+    }
+  }
+
+  async function handleConfirmReceiptDirect() {
+    const extraction = receipt?.extraction;
+    if (!extraction || !extraction.amount || extraction.amount <= 0) {
+      fail('Cannot save receipt without an amount');
+      return;
+    }
+
+    // Strict D.1.1 explicit account safety
+    const accountForSave =
+      accountPick ??
+      extraction.suggestedAccountId ??
+      (extraction.accountStatus !== 'unresolved' ? accountId : undefined);
+
+    if (!accountForSave) {
+      setStep('account');
+      fail('Please select an account for this receipt');
+      return;
+    }
+
+    const categoryForSave =
+      categoryPick ??
+      extraction.suggestedCategoryId ??
+      categoryId ??
+      categories[0]?.id;
+
+    if (!categoryForSave) {
+      setStep('category');
+      fail('Please select a category for this receipt');
+      return;
+    }
+
+    try {
+      const createdTransaction = await createMutation.mutateAsync({
+        type: 'expense',
+        amount: extraction.amount,
+        accountId: accountForSave,
+        categoryId: categoryForSave,
+        merchant: extraction.merchant || merchant || 'Receipt',
+        description: '',
+        paymentMethod: (extraction.paymentMethod as PaymentMethod) || method || 'upi',
+        date: extraction.date ? new Date(extraction.date).toISOString() : new Date().toISOString(),
+      });
+
+      if (receipt) {
+        await attachReceipt.mutateAsync({ id: receipt.id, transactionId: createdTransaction.id });
+      }
+
+      rememberChoice('expense', {
+        accountId: accountForSave,
+        categoryId: categoryForSave,
+        paymentMethod: (extraction.paymentMethod as PaymentMethod) || method,
+      });
+
+      successFeedback();
+      showToast({
+        message: 'Receipt saved',
+        detail: [formatINR(extraction.amount), extraction.merchant].filter(Boolean).join('  ·  '),
+      });
+      handleClose();
+    } catch (cause) {
+      errorFeedback();
+      setError(errorMessage(cause));
+    }
+  }
+
   function discardReceipt() {
     const current = receipt;
     setReceipt(null);
@@ -575,6 +691,7 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
           onSubmit={handleParsed}
           loading={parseQuick.isPending}
           error={parseQuick.error}
+          initialText={quickText}
         />
         <View style={{ height: theme.spacing.xl }} />
       </BottomSheet>
@@ -604,6 +721,16 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             tapFeedback();
             setStep('form');
           }}
+          onPickCategory={() => {
+            tapFeedback();
+            setReturnToPreview(true);
+            setStep('category');
+          }}
+          onPickAccount={() => {
+            applyProposal(proposal);
+            tapFeedback();
+            setStep('form');
+          }}
         />
         <View style={{ height: theme.spacing.xl }} />
       </BottomSheet>
@@ -626,10 +753,25 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
           reading={extractReceipt.isPending}
           canRead={receiptStatus.data?.reading ?? false}
           error={uploadReceipt.error ?? extractReceipt.error}
+          selectedAccountId={accountPick}
+          accountName={
+            accounts.find(
+              (a) => a.id === (accountPick ?? receipt?.extraction?.suggestedAccountId),
+            )?.name ?? null
+          }
+          categoryName={
+            categories.find(
+              (c) => c.id === (categoryPick ?? receipt?.extraction?.suggestedCategoryId),
+            )?.name ?? null
+          }
           onPickCamera={() => void pickImage('camera')}
           onPickLibrary={() => void pickImage('library')}
           onApply={applyReceipt}
+          onConfirmDirect={handleConfirmReceiptDirect}
+          onRetryExtract={retryExtract}
+          onPickAccount={() => setStep('account')}
           onDiscard={discardReceipt}
+          saving={createMutation.isPending || attachReceipt.isPending}
         />
         <View style={{ height: theme.spacing.xl }} />
       </BottomSheet>
@@ -640,7 +782,14 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
     return (
       <BottomSheet
         visible={open}
-        onClose={() => setStep('form')}
+        onClose={() => {
+          if (returnToPreview) {
+            setReturnToPreview(false);
+            setStep('preview');
+          } else {
+            setStep('form');
+          }
+        }}
         title={STEP_TITLE[step]}
         subtitle={`${RUPEE}${formatAmountInput(amount)}`}
         maxHeightRatio={SHEET_HEIGHT_RATIO}
@@ -656,7 +805,17 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
           date={date}
           onPickCategory={(picked: Category) => {
             setCategoryPick(picked.id);
-            setStep('form');
+            if (returnToPreview && proposal) {
+              setProposal({
+                ...proposal,
+                categoryId: picked.id,
+                categoryName: picked.name,
+              });
+              setReturnToPreview(false);
+              setStep('preview');
+            } else {
+              setStep('form');
+            }
           }}
           onPickAccount={(picked: Account) => {
             if (step === 'destination') setDestinationPick(picked.id);
@@ -748,12 +907,42 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
       }
     >
       {editing ? null : (
-        <SegmentedControl
-          options={KIND_OPTIONS}
-          value={type}
-          onChange={handleTypeChange}
-          accessibilityLabel="Transaction type"
-        />
+        <>
+          <SegmentedControl
+            options={KIND_OPTIONS}
+            value={type}
+            onChange={handleTypeChange}
+            accessibilityLabel="Transaction type"
+          />
+          <Pressable
+            onPress={() => {
+              tapFeedback();
+              parseQuick.reset();
+              setStep('quick');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Quick Add by typing. For example, Petrol 1200 or Zomato 450."
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              marginTop: theme.spacing.sm,
+              paddingVertical: 7,
+              paddingHorizontal: theme.spacing.md,
+              alignSelf: 'center',
+              borderRadius: theme.radius.pill,
+              backgroundColor: pressed ? theme.colors.brandSurface : theme.colors.surfaceMuted,
+              borderWidth: theme.layout.hairline,
+              borderColor: theme.colors.border,
+            })}
+          >
+            <Icon name="sparkles" size={13} color={theme.colors.brandText} />
+            <Text variant="caption" tone="secondary">
+              Quick Add: <Text variant="caption" tone="tertiary">Type "Petrol 1200", "Zomato 450"…</Text>
+            </Text>
+          </Pressable>
+        </>
       )}
 
       {/* The amount is the subject of this screen, so it gets display size and the

@@ -221,7 +221,10 @@ export async function createTransaction(
     // What someone actually saved is the only confirmation that exists. Accepting
     // a suggestion and overriding one both arrive here, and both are the user
     // telling us where this merchant belongs.
-    void rememberMerchant(userId, input.merchant, created.categoryId);
+    void rememberMerchant(userId, input.merchant, created.categoryId, {
+      accountId: input.accountId,
+      paymentMethod: input.paymentMethod,
+    });
     return created;
   });
 }
@@ -234,10 +237,12 @@ export async function createTransaction(
  * should wait on an aggregation to see their own transaction saved. `raise`
  * swallows its own errors, so the floating promise cannot reject.
  */
-function afterLedgerChange(userId: string, ...dates: (Date | undefined)[]): void {
+function afterLedgerChange(userId: string, ...dates: (Date | string | undefined)[]): void {
   const months = new Set<number>();
-  for (const date of dates) {
-    if (!date) continue;
+  for (const raw of dates) {
+    if (!raw) continue;
+    const date = raw instanceof Date ? raw : new Date(raw);
+    if (isNaN(date.getTime())) continue;
     // One evaluation per distinct month, so moving a transaction across a
     // boundary re-checks both ends without checking either twice.
     const key = date.getUTCFullYear() * 12 + date.getUTCMonth();
@@ -325,7 +330,10 @@ export async function updateTransaction(
     // An edit is the strongest correction there is: someone looked at what was
     // filed and changed it. Recording it here is what makes "remember my
     // corrections" true rather than aspirational.
-    void rememberMerchant(userId, transaction.merchant, transaction.categoryId);
+    void rememberMerchant(userId, transaction.merchant, transaction.categoryId, {
+      accountId: transaction.accountId,
+      paymentMethod: transaction.paymentMethod,
+    });
 
     // Both ends: an edit that moved the date out of September and into October
     // can take September back under its cap and push October over it.
