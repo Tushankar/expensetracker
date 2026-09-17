@@ -28,19 +28,25 @@ import { MerchantMemoryModel } from './merchantMemory.model';
  * the same shop look different.
  */
 export function merchantKey(merchant: string): string {
-  return merchant
-    .toLowerCase()
-    .normalize('NFKD')
-    // Anything that is not a letter or a digit is a separator, not a character:
-    // `cult.fit`, `cult fit` and `cult-fit` are one shop.
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    // A long digit run is a reference, not a name. Short ones stay, because they
-    // are often part of it — `7 Eleven`, `24 Seven`.
-    .replace(/\b\d{4,}\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 120);
+  return (
+    merchant
+      .toLowerCase()
+      .normalize('NFKD')
+      // Anything that is not a letter or a digit is a separator, not a character:
+      // `cult.fit`, `cult fit` and `cult-fit` are one shop.
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      // A long digit run is a reference, not a name. Short ones stay, because
+      // they are often part of one — `7 Eleven`, `24 Seven`. This has to happen
+      // while the separators are still spaces, or there are no word boundaries
+      // left to anchor to.
+      .replace(/\b\d{4,}\b/g, ' ')
+      // Then the spaces go too. `IndianOil`, `INDIAN OIL` and `indian-oil` are
+      // one shop and have to reach one key, or the memory for it is split across
+      // three rows that each never reach a confident count.
+      .replace(/\s+/g, '')
+      .slice(0, 120)
+  );
 }
 
 /**
