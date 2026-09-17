@@ -1,5 +1,11 @@
 export { TransactionRow, type TransactionRowProps } from './TransactionRow';
-export { TransactionGroups, type TransactionGroupsProps } from './TransactionGroups';
+export {
+  TransactionListItem,
+  TransactionSectionHeader,
+  buildTransactionSections,
+  type TransactionListItemProps,
+  type TransactionSection,
+} from './TransactionSections';
 export {
   TransactionCalendar,
   type TransactionCalendarProps,

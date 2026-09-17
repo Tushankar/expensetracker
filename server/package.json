@@ -17,7 +17,8 @@
     "test:api": "tsx src/scripts/apitest.ts",
     "test:step": "tsx src/scripts/steptest.ts",
     "test:ai": "tsx src/scripts/aitest.ts",
-    "test:step5": "tsx src/scripts/step5test.ts"
+    "test:step5": "tsx src/scripts/step5test.ts",
+    "test:step6": "tsx src/scripts/step6test.ts"
   },
   "dependencies": {
     "@types/luxon": "^3.7.5",

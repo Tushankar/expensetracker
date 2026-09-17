@@ -9,11 +9,13 @@ import type {
   AnalyticsOverview,
   AppNotification,
   CategorySuggestion,
+  DeletionSummary,
   MerchantMemory,
   MerchantSuggestion,
   QuickEntryProposal,
   Receipt,
   ReceiptStatus,
+  TransactionExport,
   UploadTicket,
   UploadedImage,
   AuthSession,
@@ -485,5 +487,31 @@ export const receiptApi = {
 
   remove(id: string) {
     return requestData<{ deleted: boolean }>(`/receipts/${id}`, { method: 'DELETE' });
+  },
+};
+
+
+// ------------------------------------------------------------------- step 6
+
+export const dataApi = {
+  /** The whole ledger for a window, as CSV. */
+  exportTransactions(range: { from: string; to: string }) {
+    return requestData<{ export: TransactionExport }>('/transactions/export', {
+      params: range,
+    }).then((data) => data.export);
+  },
+
+  /**
+   * Closes the account and deletes everything in it.
+   *
+   * Password-confirmed on the server. Every session dies with it, so the token
+   * that made the call stops working the moment it succeeds — the app has to
+   * clear its own state rather than retry anything.
+   */
+  deleteProfile(password: string) {
+    return requestData<{ deleted: DeletionSummary }>('/users/me', {
+      method: 'DELETE',
+      body: { password, confirm: 'DELETE' },
+    }).then((data) => data.deleted);
   },
 };

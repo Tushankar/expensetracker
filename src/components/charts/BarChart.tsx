@@ -1,4 +1,12 @@
+import { useEffect } from 'react';
 import { View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Text } from '@/components/ui';
 import { useTheme } from '@/theme';
@@ -61,18 +69,16 @@ export function BarChart({
           gap: barGap,
         }}
       >
-        {data.map((bar) => (
-          <View
+        {data.map((bar, index) => (
+          <GrowingBar
             key={bar.label}
-            style={{
-              flex: 1,
-              height: Math.max(4, (bar.value / max) * height),
-              borderRadius: barRadius,
-              backgroundColor: color,
-              // The shortest bars read as pale stubs, the tallest as solid — cheaper
-              // than a gradient and it survives a theme flip.
-              opacity: 0.45 + (bar.value / max) * 0.55,
-            }}
+            height={Math.max(4, (bar.value / max) * height)}
+            // The shortest bars read as pale stubs, the tallest as solid — cheaper
+            // than a gradient and it survives a theme flip.
+            opacity={0.45 + (bar.value / max) * 0.55}
+            color={color}
+            radius={barRadius}
+            index={index}
           />
         ))}
       </View>
@@ -95,5 +101,52 @@ export function BarChart({
         </View>
       ) : null}
     </View>
+  );
+}
+
+/**
+ * One bar, growing from the axis.
+ *
+ * Staggered by a few milliseconds each so a row reads left to right rather than
+ * inflating as one block — the difference between a chart that appears and a
+ * chart that draws itself. Capped so a twelve-month series does not turn a
+ * flourish into a wait.
+ *
+ * It animates on mount and on any change of height, which is what makes switching
+ * period feel like the same chart re-reading rather than a new one appearing.
+ */
+function GrowingBar({
+  height,
+  opacity,
+  color,
+  radius,
+  index,
+}: {
+  height: number;
+  opacity: number;
+  color: string;
+  radius: number;
+  index: number;
+}) {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+
+  const grown = useSharedValue(reduceMotion ? height : 0);
+
+  useEffect(() => {
+    grown.value = reduceMotion
+      ? height
+      : withDelay(
+          Math.min(index, 8) * 35,
+          withTiming(height, { duration: 420, easing: theme.easing.decelerate }),
+        );
+  }, [grown, height, index, reduceMotion, theme.easing.decelerate]);
+
+  const style = useAnimatedStyle(() => ({ height: grown.value }));
+
+  return (
+    <Animated.View
+      style={[style, { flex: 1, borderRadius: radius, backgroundColor: color, opacity }]}
+    />
   );
 }

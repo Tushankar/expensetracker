@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { Icon, Text } from '@/components/ui';
+import { AnimatedAmount, Icon, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
 import { formatINR, percentChange } from '@/utils/currency';
@@ -106,16 +106,19 @@ export function BalanceCard({ summary, onPeriodPress }: BalanceCardProps) {
         </Pressable>
       </View>
 
-      <Text
+      {/* Counts to its new value rather than jumping. This is the one figure
+          that moves because of something the person just did, and watching it
+          settle is the app confirming the entry landed. */}
+      <AnimatedAmount
+        value={summary.currentBalance}
         variant="amountLg"
         color={theme.colors.heroText}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.6}
+        placeholder={masked ? '••••••' : undefined}
+        accessibilityLabel={
+          masked ? 'Balance hidden' : `Total balance ${formatINR(summary.currentBalance)}`
+        }
         style={{ marginTop: theme.spacing.md }}
-      >
-        {masked ? '••••••' : formatINR(summary.currentBalance)}
-      </Text>
+      />
 
       {delta !== null ? (
         <View

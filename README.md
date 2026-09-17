@@ -9,16 +9,22 @@ handles loading, errors, empty states and lost connections.
 **Step 3** turned it into a daily dashboard: budgets, recurring transactions, a
 notification system, a calendar view, and week / month / custom date periods
 throughout.
-**Step 4 — this** — added the analytics layer and a financial assistant on Groq:
-an Insights tab, a monthly summary and insight cards, a chat you can ask about
-your own money, and category suggestions on the entry sheet.
-
-Receipt scanning is deliberately not here yet.
+**Step 4** added the analytics layer and a financial assistant on Groq: an
+Insights tab, a monthly summary and insight cards, a chat you can ask about your
+own money, and category suggestions on the entry sheet.
+**Step 5** made recording an expense fast: type "Petrol 1200" and confirm it,
+photograph a bill and have the total read off it, and a merchant memory that
+learns where you file things and improves when you correct it.
+**Step 6 — this** — was the production pass: a virtualised ledger, memoised rows,
+CSV export, real account deletion, an animated balance, and a test suite that
+walks every endpoint from the wrong account to prove one user cannot reach
+another's data.
 
 The assistant does not calculate anything. Every figure it states is produced by
 MongoDB aggregation first, and a reply containing a number the server did not
 compute is rejected before it reaches the app. [The assistant](#the-assistant)
-explains how that is enforced.
+explains how that is enforced, and [Fast entry](#fast-entry) explains why the
+quick-entry parser reads amounts by rule rather than asking a model.
 
 ## Running it
 
@@ -51,11 +57,11 @@ for a tunnel or a deployed server, and restart the bundler afterwards (Metro inl
 | --- | --- |
 | `npm run typecheck` | App and scripts. |
 | `npm run lint` | |
-| `npm run verify` | 48 unit checks + 15 API-client behaviour tests. No server needed. |
-| `npm run verify:e2e` | 54 checks of the mobile data layer against a running API. |
-| `npm run server:test` | 168 integration tests of the API against the real database. |
+| `npm run verify` | 53 unit checks + 15 API-client behaviour tests. No server needed. |
+| `npm run verify:e2e` | 62 checks of the mobile data layer against a running API. |
+| `npm run server:test` | 243 integration tests of the API against the real database. |
 
-All five pass — 285 checks. The last two need `npm run server` in another
+All five pass — 373 checks. The last two need `npm run server` in another
 terminal.
 
 What the suites are for, in order: `verify` covers the pure logic that is easy to get
@@ -72,11 +78,20 @@ of the month counts against *that* month's budget, and that crossing a cap alert
 exactly once. `test:ai` covers the analytics aggregations and every guard around the
 assistant — that a model which states a figure the data does not contain is retried
 once and then discarded, that an advice question never reaches a model at all, and
-that asking for a category suggestion writes nothing.
+that asking for a category suggestion writes nothing. `test:step5` covers the
+quick-entry parser, merchant memory and receipts — that "1.2k" is twelve hundred and a
+UPI reference is not an amount, that "rent 25000 on 1 sep" does not read the 1 as
+money, that a correction eventually outvotes a habit but one slip does not, and that an
+upload nobody signed is refused.
 
-The grounding tests run entirely in-process, with no Groq and no database. That is
-deliberate: the point of the guard is that it behaves identically whether the model is
-brilliant, broken or absent, so feeding it a live model would test the wrong thing.
+The grounding and parser tests run entirely in-process, with no Groq and no database.
+That is deliberate: the point of both is that they behave identically whether the model
+is brilliant, broken or absent, so feeding them a live model would test the wrong
+thing. The receipt tests skip cleanly when Cloudinary is not configured rather than
+failing a suite over a deployment choice. `test:step6` is the audit suite: it runs
+two real accounts side by side and tries every id-addressed read and write from the
+wrong one, checks that a spoofed `userId` in a body changes nothing, and proves that
+closing an account actually empties every collection it appeared in.
 
 What none of them cover: React rendering. Layout, gestures and animation still need a
 device.
@@ -98,6 +113,8 @@ device.
 | Icons | Hand-authored SVG paths, ~95 glyphs | — |
 | Scheduler | — | In-process interval, idempotent by occurrence count |
 | Assistant | — | Groq (`openai/gpt-oss-120b`), server-side only |
+| Receipts | expo-image-picker, direct upload | Cloudinary, signed server-side |
+| Reading bills | — | Groq vision (`qwen/qwen3.8-27b`) |
 
 ## Layout
 
@@ -112,6 +129,7 @@ src/
     home/       Home composites
     dashboard/  Period selector, budget snapshot, upcoming strip
     budgets/    Budget progress row
+    entry/      Quick-entry panel, confirmation preview, receipt panels
     insights/   Stat grid, summary card, insight cards, chat bubbles
     transactions/ Row, day-grouped list, calendar view
     activity/   Activity composites
@@ -119,7 +137,7 @@ src/
   navigation/   Stack + tabs, custom TabBar
   screens/      One file per screen; sheets/ for modal surfaces
   store/        Auth (persisted to the keychain), UI, accent
-  utils/        Currency, dates, periods, breakdown, haptics
+  utils/        Currency, dates, periods, breakdown, upload, haptics
 scripts/        Checks that run under Node, and stubs for the native modules
 server/         The API. Has its own README.
 ```
@@ -336,6 +354,97 @@ error message.
 that separate an app that feels finished from one that does not, and they are exactly
 the states that get skipped when each screen rolls its own.
 
+## Fast entry
+
+Three ways in, and the default one is untouched by the other two.
+
+**The keypad** is still what opens: amount, category, save. The other two live behind
+a pair of icons in the sheet's header rather than a row of mode switches above the
+keypad, because a switcher would cost the common path a glance every single time to
+serve the uncommon one.
+
+### Typing it
+
+"Petrol 1200", "Zomato 450", "DMart 2380", "Chai 40 cash", "Uber 260 yesterday".
+
+**The amount is found by rule, never by a model.** Same principle as the assistant, and
+it matters more here: this is the one screen in the app where a wrong number gets
+*saved* rather than merely read. `quickEntry.ts` is pure functions with no network —
+`1.2k` is twelve hundred, `1200.50` is not, `₹1,20,000` and `450/-` both parse, and a
+twelve-digit UPI reference is refused outright because reading one as rupees would
+record eleven lakh.
+
+**The date and the payment method are taken out of the string before the amount is
+looked for.** Both contain digits. "rent 25000 on 1 sep" and "chai 40 2 days ago" each
+hold a number that is plainly not money, and searching the raw text finds two
+candidates in both, picks the larger, and warns about an ambiguity the parser itself
+invented. Dates are read in the account holder's own zone, day-first, because 12/09 is
+the twelfth of September here.
+
+Only the **category** is ever inferred, and even then merchant memory and the brand
+table get first refusal.
+
+**Then it shows you what it read.** Amount at display size, every inferred field
+labelled with where it came from, and anything it was unsure about written out in
+words. Save is disabled outright when there is no amount. A parser that is right nine
+times in ten is a delight with that step and a slow-motion disaster without it: the
+tenth entry is wrong, nobody notices, and it surfaces six weeks later as a figure in a
+chart that cannot be traced to anything.
+
+`Edit` drops the proposal into the ordinary form, and `Save` goes through the same
+mutation a manual entry does. There is no second write path — the one used less is
+always the one that rots.
+
+### Photographing a bill
+
+Camera or gallery, straight to Cloudinary, read by a vision model, shown for
+confirmation.
+
+**The bytes never touch our API.** It signs an upload ticket beforehand and verifies
+Cloudinary's reply afterwards, which is what keeps the API secret on the server while
+still letting the phone upload directly. That also makes the progress bar honest — it
+fills as the image reaches Cloudinary, not as it reaches us. `fetch` cannot report
+upload progress at all, so this one place in the app uses `XMLHttpRequest` deliberately
+rather than by accident.
+
+**This is the only number in the app a model produces that nothing can check.**
+Everywhere else a figure is computed from the database or matched by rule. Here the
+ground truth is a photograph. So the safety moves from verification to consent: nothing
+extracted is ever written automatically, the model returns the *printed line* it took
+the total from so you can check it against the paper in your hand, and anything
+illegible comes back empty rather than guessed. Applying it fills the form — which
+still has to be saved.
+
+Line items are extracted and shown, and they are the least reliable part: at phone-photo
+resolution the model occasionally misreads a small figure by a digit. The grand total,
+which is the number that matters, is read off one clearly-labelled line and has been
+exact in testing. Both are shown for confirmation for the same reason.
+
+### Remembering
+
+The app learns where you file each merchant, and a correction eventually wins.
+
+One row per (user, merchant, category) rather than one per merchant, which is the whole
+trick. Filing Amazon under Shopping nine times and then once under Electronics does not
+erase the nine — it records a second opinion that has to earn its place. Highest count
+wins, ties go to whichever was used more recently, so a genuine change of mind takes
+over after a couple of repeats while a single slip does not. Storing only the winner
+would make the last tap authoritative, and one mistyped category would poison that
+merchant forever.
+
+Names are normalised so `IndianOil`, `INDIAN OIL`, `indian-oil` and `Indian Oil #44121`
+all reach one key. Without that the memory holds twenty rows of one each and never
+reaches a confident answer. Long digit runs are stripped as references; short ones stay,
+because `7 Eleven` is a name.
+
+The order of consultation is **memory → brand table → model**. Your own history beats
+what a language model thinks people generally do, it costs one indexed read instead of
+a network round trip, and it is the only one of the three that improves when you
+correct it. The suggestion chip says which, because they do not deserve equal trust.
+
+Settings has no screen for this; `DELETE /merchants` is the way out of a memory that
+learned wrongly, and the app calls it from nowhere yet. That is a known gap.
+
 ## The add-transaction flow
 
 The whole sheet serves one number: how many gestures it takes to record a ₹40 chai.
@@ -376,6 +485,32 @@ Icons and hues are stored as names, resolved on the device by `toIconName` and
 `categoryColor` — both of which fall back rather than crash, so a category created by a
 newer client renders as a neutral dot instead of taking the screen down.
 `verify:e2e` asserts that every seeded name actually resolves today.
+
+## Your data
+
+**Export.** Settings → Export transactions writes a CSV of everything and opens the
+share sheet. Amounts are plain decimals with no grouping and no rupee sign, because
+that column exists for a spreadsheet to sum and `₹1,20,000` is text to every
+spreadsheet ever written. The file carries a BOM so Excel on Windows reads Indian
+merchant names as UTF-8 rather than as the system codepage, and it goes to the cache
+directory rather than documents — it exists to be shared, and a permanent copy of
+someone's full financial history sitting in app storage is a liability nobody asked
+for.
+
+Transfers export as their own type with both accounts named, so summing the Amount
+column by Type gives the same three totals the app shows. Flattening a transfer into
+a negative expense would make the export disagree with the app that produced it.
+
+**Closing an account** deletes the rows. Not a flag, not a thirty-day grace period
+during which a finance app still holds a year of your spending — every collection,
+plus the receipt images on Cloudinary, which would otherwise outlive everything that
+pointed at them. It asks for the password and a typed confirmation, and it lists what
+is about to go in specific words rather than as "all your data", because vagueness at
+that moment is how people delete something they meant to keep.
+
+**Backup and sync** is the server. Everything lives there and the app is a view onto
+it: signing in on a second device shows the same ledger, and the export is the way to
+take a copy out. There is no local database to get out of step.
 
 ## Design conventions
 

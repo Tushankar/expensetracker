@@ -1,4 +1,8 @@
+import type { UploadFile } from '@/utils/upload';
+
 import type { UploadTicket, UploadedImage } from './types';
+
+export { fileFromUri, type UploadFile } from '@/utils/upload';
 
 /**
  * Sending an image straight to Cloudinary, with honest progress.
@@ -15,7 +19,7 @@ import type { UploadTicket, UploadedImage } from './types';
  */
 export function uploadToCloudinary(
   ticket: UploadTicket,
-  file: { uri: string; name: string; type: string },
+  file: UploadFile,
   options: {
     onProgress?: (fraction: number) => void;
     signal?: AbortSignal;
@@ -100,20 +104,4 @@ function readError(body: string): string | null {
   } catch {
     return null;
   }
-}
-
-/** Derives a filename and MIME type from a picker result. */
-export function fileFromUri(uri: string, mimeType?: string | null): {
-  uri: string;
-  name: string;
-  type: string;
-} {
-  const extension = /\.(\w+)(?:\?|$)/.exec(uri)?.[1]?.toLowerCase() ?? 'jpg';
-  return {
-    uri,
-    name: `receipt.${extension}`,
-    // HEIC comes off an iPhone camera by default and Cloudinary handles it, but a
-    // missing type makes the multipart part unreadable, so it always gets one.
-    type: mimeType || (extension === 'png' ? 'image/png' : 'image/jpeg'),
-  };
 }

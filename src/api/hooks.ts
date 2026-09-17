@@ -15,6 +15,7 @@ import {
   analyticsApi,
   authApi,
   budgetApi,
+  dataApi,
   merchantApi,
   receiptApi,
   categoryApi,
@@ -787,5 +788,37 @@ export function useMerchantSuggestions(query: string, enabled = true) {
     enabled: status === 'signedIn' && enabled,
     staleTime: 60_000,
     queryFn: () => merchantApi.list(query),
+  });
+}
+
+
+// ------------------------------------------------------------------- step 6
+
+export function useExportTransactions() {
+  return useMutation({
+    mutationFn: (range: { from: string; to: string }) => dataApi.exportTransactions(range),
+  });
+}
+
+/**
+ * Closes the user's profile, then empties the app.
+ *
+ * Named `Profile` rather than `Account` because an Account in this app is a bank
+ * account — `useDeleteAccount` already exists and archives one of those. Two
+ * destructive hooks a letter apart is how someone deletes the wrong thing.
+ *
+ * The cache is cleared rather than invalidated: invalidating would refetch, and
+ * every one of those requests would now 401 against a user that no longer exists.
+ */
+export function useDeleteProfile() {
+  const client = useQueryClient();
+  const signOut = useAuthStore((state) => state.signOut);
+
+  return useMutation({
+    mutationFn: (password: string) => dataApi.deleteProfile(password),
+    onSuccess: async () => {
+      await signOut();
+      client.clear();
+    },
   });
 }

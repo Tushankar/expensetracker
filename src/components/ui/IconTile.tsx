@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
@@ -22,7 +23,12 @@ const GLYPH = { sm: 17, md: 20, lg: 24 } as const;
  * The fill is the accent at ~14% so tiles stay quiet next to the amount, which is
  * the thing the eye should actually land on.
  */
-export function IconTile({ name, color, size = 'md', style }: IconTileProps) {
+export const IconTile = memo(function IconTile({
+  name,
+  color,
+  size = 'md',
+  style,
+}: IconTileProps) {
   const theme = useTheme();
   const accent = color ?? theme.colors.textSecondary;
   const box = BOX[size];
@@ -46,7 +52,7 @@ export function IconTile({ name, color, size = 'md', style }: IconTileProps) {
       <Icon name={name} size={GLYPH[size]} color={accent} />
     </View>
   );
-}
+})
 
 /** Accepts the `#RRGGBB` values used throughout the palette. */
 function withAlpha(hex: string, alpha: number): string {

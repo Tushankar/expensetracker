@@ -679,3 +679,28 @@ export const QUICK_ENTRY_EXAMPLES: readonly string[] = [
   'Chai 40 cash',
   'Uber 260 yesterday',
 ];
+
+
+// ------------------------------------------------------------------- step 6
+
+/** A CSV of the ledger, ready to write to a file and share. */
+export type TransactionExport = {
+  filename: string;
+  mimeType: string;
+  rowCount: number;
+  content: string;
+};
+
+/** What was removed when an account was closed. Shown once, then forgotten. */
+export type DeletionSummary = {
+  transactions: number;
+  accounts: number;
+  categories: number;
+  budgets: number;
+  recurring: number;
+  notifications: number;
+  receipts: number;
+  merchantMemories: number;
+  aiMessages: number;
+  sessions: number;
+};

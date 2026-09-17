@@ -6,6 +6,7 @@ export {
   analyticsApi,
   authApi,
   categoryApi,
+  dataApi,
   merchantApi,
   receiptApi,
   transactionApi,

@@ -103,6 +103,39 @@ function expectError(response: { status: number; body: Envelope<unknown> }, stat
 
 const paise = (value: number) => Math.round(value * 100);
 
+/** True for the one failure that is an outage rather than a wrong answer. */
+function isBusy(error: unknown): boolean {
+  return error instanceof Error && /busy|unavailable|not configured/i.test(error.message);
+}
+
+/**
+ * Runs a vision call, waiting out one rate limit.
+ *
+ * Reading a receipt costs a couple of thousand tokens and a free Groq tier does
+ * not have room for two of them inside a minute. The client already retries a
+ * short `retry-after` on its own but deliberately refuses to fall back to the
+ * small model — it cannot see — so a busy minute reaches here as a throw.
+ *
+ * A suite that failed on that would be reporting "the reader is broken" when the
+ * truth is "the reader was not asked", which is a different and untrue claim.
+ * Waiting once and skipping only if it is still busy keeps the assertion real.
+ */
+async function vision<T>(run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isBusy(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 35_000));
+  }
+
+  try {
+    return await run();
+  } catch (error) {
+    if (isBusy(error)) return null;
+    throw error;
+  }
+}
+
 type Session = { accessToken: string; user: { id: string } };
 type Account = { id: string; name: string };
 type Category = { id: string; name: string; type: string };
@@ -556,6 +589,33 @@ async function main(): Promise<void> {
   // ================================================================= receipts
   section('Receipts');
 
+  // Run before the round trip below, which spends most of the vision model's
+  // per-minute token budget. Ordering it first is the difference between
+  // asserting this safety property and skipping it on a rate limit.
+  if (isVisionConfigured()) {
+    const blank = `data:image/png;base64,${fs
+      .readFileSync(path.join(__dirname, 'fixtures', 'blank.png'))
+      .toString('base64')}`;
+
+    // Vision deliberately refuses to fall back to the small model — it cannot
+    // see — so a rate limit here is an outage, not a wrong answer. Skipping says
+    // "not checked"; failing would say "the guard is broken", which is a
+    // different and untrue claim.
+    const extraction = await vision(() => extractFromImage(blank, IST));
+
+    if (extraction) {
+      await test('the reader refuses to invent a total it cannot see', () => {
+        assert.equal(extraction.amount, null, 'it read a number off an empty image');
+        assert.equal(extraction.confidence, 'low');
+      });
+    } else {
+      skip('the reader refuses to invent a total it cannot see', 'the reader stayed rate limited');
+    }
+  } else {
+    skip('the reader on a blank image', 'no vision model configured');
+  }
+
+
   const status = data<{ storage: boolean; reading: boolean; maxBytes: number }>(
     await call('GET', '/receipts/status', { token }),
   );
@@ -650,31 +710,39 @@ async function main(): Promise<void> {
     });
 
     if (status.reading) {
-      await test('the bill is read, and says where it read the total', async () => {
-        const { receipt } = data<{ receipt: Receipt }>(
-          await call('POST', `/receipts/${receiptId}/extract`, { token }),
+      const beforeRead = data<{ transactions: unknown[] }>(
+        await call('GET', '/transactions?limit=100', { token }),
+      ).transactions.length;
+
+      const read = await vision(async () => {
+        const response = await call<{ receipt: Receipt }>(
+          'POST',
+          `/receipts/${receiptId}/extract`,
+          { token },
         );
-
-        assert.ok(receipt.extraction, 'nothing was extracted');
-        assert.equal(receipt.extraction?.amount, paise(2380), 'the grand total was misread');
-        assert.match(receipt.extraction?.merchant ?? '', /dmart/i);
-        // The printed line, so a person can check the figure against the paper.
-        assert.match(receipt.extraction?.amountText ?? '', /2380/);
-        assert.ok((receipt.extraction?.items.length ?? 0) > 0, 'no line items');
+        if (!response.body.success) throw new Error(response.body.error?.message ?? 'extract failed');
+        return data(response).receipt;
       });
 
-      await test('reading a bill does not touch the ledger', async () => {
-        const before = data<{ transactions: unknown[] }>(
-          await call('GET', '/transactions?limit=100', { token }),
-        ).transactions.length;
+      if (read) {
+        await test('the bill is read, and says where it read the total', () => {
+          assert.ok(read.extraction, 'nothing was extracted');
+          assert.equal(read.extraction?.amount, paise(2380), 'the grand total was misread');
+          assert.match(read.extraction?.merchant ?? '', /dmart/i);
+          // The printed line, so a person can check the figure against the paper.
+          assert.match(read.extraction?.amountText ?? '', /2380/);
+          assert.ok((read.extraction?.items.length ?? 0) > 0, 'no line items');
+        });
 
-        await call('POST', `/receipts/${receiptId}/extract`, { token });
-
-        const after = data<{ transactions: unknown[] }>(
-          await call('GET', '/transactions?limit=100', { token }),
-        ).transactions.length;
-        assert.equal(after, before, 'an extraction created a transaction');
-      });
+        await test('reading a bill does not touch the ledger', async () => {
+          const after = data<{ transactions: unknown[] }>(
+            await call('GET', '/transactions?limit=100', { token }),
+          ).transactions.length;
+          assert.equal(after, beforeRead, 'an extraction created a transaction');
+        });
+      } else {
+        skip('reading the bill', 'the reader stayed rate limited');
+      }
     } else {
       skip('reading the bill', 'no vision model configured');
     }
@@ -748,36 +816,6 @@ async function main(): Promise<void> {
   // The reader, exercised directly. Works without Cloudinary because a data URI
   // is a perfectly good image source, which keeps the one model-produced number
   // in this app under test on any deployment.
-  if (isVisionConfigured()) {
-    const blank = `data:image/png;base64,${fs
-      .readFileSync(path.join(__dirname, 'fixtures', 'blank.png'))
-      .toString('base64')}`;
-
-    // Vision deliberately refuses to fall back to the small model — it cannot
-    // see — so a rate limit here is an outage, not a wrong answer. Skipping says
-    // "not checked"; failing would say "the guard is broken", which is a
-    // different and untrue claim.
-    let extraction: Awaited<ReturnType<typeof extractFromImage>> | null = null;
-    try {
-      extraction = await extractFromImage(blank, IST);
-    } catch (error) {
-      skip(
-        'the reader refuses to invent a total it cannot see',
-        error instanceof Error ? error.message : 'the reader was unavailable',
-      );
-    }
-
-    if (extraction) {
-      const read = extraction;
-      await test('the reader refuses to invent a total it cannot see', () => {
-        assert.equal(read.amount, null, 'it read a number off an empty image');
-        assert.equal(read.confidence, 'low');
-      });
-    }
-  } else {
-    skip('the reader on a blank image', 'no vision model configured');
-  }
-
   console.log(`\n${'='.repeat(62)}`);
   if (failures.length > 0) {
     console.log('\nFailures:\n');

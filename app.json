@@ -49,7 +49,8 @@
           "cameraPermission": "Paisa uses the camera so you can photograph a receipt.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "reactCompiler": true

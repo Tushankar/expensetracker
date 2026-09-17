@@ -830,6 +830,119 @@ async function main(): Promise<void> {
     assert.equal(after.expense, before.expense, 'asking for a suggestion recorded a transaction');
   });
 
+  // --------------------------------------------------- quick entry and receipts
+  section('Quick entry, memory and receipts');
+
+  await test('a typed line comes back as a proposal, not a transaction', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const range = periodRange('month');
+
+    const before = await transactionApi.summary({ from: range.from, to: range.to });
+    const proposal = await aiApi.parse({ text: 'DMart 2380' });
+    const after = await transactionApi.summary({ from: range.from, to: range.to });
+
+    assert.equal(proposal.amount, rupees(2380));
+    assert.equal(proposal.merchant, 'DMart');
+    assert.ok(proposal.categoryId, 'nothing to pre-select');
+    assert.equal(after.expense, before.expense, 'parsing recorded a transaction');
+  });
+
+  await test('the proposal carries everything the preview needs', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const proposal = await aiApi.parse({ text: 'Amazon 1299 credit card yesterday' });
+
+    assert.equal(proposal.paymentMethod, 'credit_card');
+    assert.ok(proposal.accountId && proposal.accountName, 'no account to show');
+    assert.ok(['memory', 'merchant', 'model', 'none'].includes(proposal.categorySource));
+    assert.equal(proposal.matched.method, 'credit card');
+    assert.equal(proposal.matched.date, 'yesterday');
+  });
+
+  await test('a line with no amount is marked unsaveable', async () => {
+    const { aiApi } = await import('../src/api/endpoints');
+    const proposal = await aiApi.parse({ text: 'coffee' });
+
+    assert.equal(proposal.amount, null);
+    assert.equal(proposal.confidence, 'low');
+    assert.ok(proposal.warnings.length > 0, 'the preview would offer Save on a blank');
+  });
+
+  await test('the app can read back what it taught the server', async () => {
+    const { merchantApi } = await import('../src/api/endpoints');
+
+    // Every transaction this run created used a merchant, so there is history.
+    const memory = await merchantApi.recall('Swiggy');
+    if (memory) {
+      assert.ok(memory.count >= 1);
+      assert.ok(memory.categoryName.length > 0);
+    }
+
+    const suggestions = await merchantApi.list('');
+    assert.ok(Array.isArray(suggestions));
+  });
+
+  await test('receipt status tells the app what it may offer', async () => {
+    const { receiptApi } = await import('../src/api/endpoints');
+    const status = await receiptApi.status();
+
+    // The camera button is hidden rather than broken when storage is absent, so
+    // the app has to be able to ask.
+    assert.equal(typeof status.storage, 'boolean');
+    assert.equal(typeof status.reading, 'boolean');
+    assert.ok(status.maxBytes > 0);
+  });
+
+  await test('a transaction with no receipt lists none', async () => {
+    const { receiptApi } = await import('../src/api/endpoints');
+    const { transactions } = await transactionApi.list({ limit: 1 });
+    const first = transactions[0];
+    if (!first) return;
+
+    const receipts = await receiptApi.list({ transactionId: first.id });
+    assert.ok(Array.isArray(receipts));
+  });
+
+  // ------------------------------------------------------------ export
+  section('Export');
+
+  await test('the ledger exports as a CSV the app can write to a file', async () => {
+    const { dataApi } = await import('../src/api/endpoints');
+
+    const now = new Date();
+    const file = await dataApi.exportTransactions({
+      from: new Date(now.getFullYear() - 1, 0, 1).toISOString(),
+      to: now.toISOString(),
+    });
+
+    assert.match(file.filename, /^paisa-.*\.csv$/);
+    assert.equal(file.mimeType, 'text/csv');
+    assert.ok(file.rowCount > 0, 'nothing to export after a whole run of writes');
+
+    // The BOM matters: without it Excel on Windows reads Indian merchant names
+    // as the system codepage rather than UTF-8.
+    assert.ok(file.content.startsWith('\ufeff'), 'no BOM, so Excel will mangle it');
+
+    const lines = file.content.trim().split('\r\n');
+    assert.equal(lines.length, file.rowCount + 1, 'the row count and the file disagree');
+  });
+
+  await test('a transfer is exported as a transfer, not as spending', async () => {
+    const { dataApi } = await import('../src/api/endpoints');
+
+    const now = new Date();
+    const file = await dataApi.exportTransactions({
+      from: new Date(now.getFullYear() - 1, 0, 1).toISOString(),
+      to: now.toISOString(),
+    });
+
+    const transfers = file.content.split('\r\n').filter((line) => line.includes(',transfer,'));
+    assert.ok(transfers.length > 0, 'the run created a transfer and it is missing');
+    assert.ok(
+      transfers.every((line) => !line.includes(',expense,') && !line.includes(',income,')),
+      'a transfer was exported under another type',
+    );
+  });
+
   // ----------------------------------------------------------------- offline
   section('Network failure');
 

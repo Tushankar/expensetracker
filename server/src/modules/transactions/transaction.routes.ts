@@ -8,15 +8,18 @@ import {
   createTransactionSchema,
   listTransactionsSchema,
   dailySchema,
+  exportSchema,
   summarySchema,
   transactionIdParam,
   updateTransactionSchema,
   type CreateTransactionInput,
   type DailyQuery,
   type ListTransactionsQuery,
+  type ExportQuery,
   type SummaryQuery,
   type UpdateTransactionInput,
 } from './transaction.schemas';
+import { exportTransactions } from './export.service';
 import {
   createTransaction,
   deleteTransaction,
@@ -41,6 +44,19 @@ transactionRouter.get('/', validate({ query: listTransactionsSchema }), async (r
  * Declared before `/:id`, or Express matches "summary" as an id and the route is
  * unreachable.
  */
+/**
+ * The whole ledger for a window, as a CSV the user can keep.
+ *
+ * Returned inside the normal envelope rather than as a raw file download: every
+ * other endpoint answers the same shape, the app has to write the file locally
+ * anyway before it can be shared, and a one-off content type here would be a
+ * special case in the client for no gain.
+ */
+transactionRouter.get('/export', validate({ query: exportSchema }), async (req, res) => {
+  const query = validatedQuery<ExportQuery>(res);
+  ok(res, { export: await exportTransactions(currentUser(req).id, query) });
+});
+
 transactionRouter.get('/summary', validate({ query: summarySchema }), async (req, res) => {
   const { from, to } = validatedQuery<SummaryQuery>(res);
   ok(res, { summary: await getSummary(currentUser(req).id, { from, to }) });

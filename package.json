@@ -13,7 +13,7 @@
     "verify": "tsx --tsconfig scripts/tsconfig.json scripts/verify.ts && tsx --tsconfig scripts/tsconfig.json scripts/client.test.ts",
     "server": "npm --prefix server run dev",
     "server:seed": "npm --prefix server run seed",
-    "server:test": "npm --prefix server run test:api && npm --prefix server run test:step && npm --prefix server run test:ai && npm --prefix server run test:step5",
+    "server:test": "npm --prefix server run test:api && npm --prefix server run test:step && npm --prefix server run test:ai && npm --prefix server run test:step5 && npm --prefix server run test:step6",
     "verify:e2e": "tsx --tsconfig scripts/tsconfig.json scripts/e2e.test.ts"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
     "@tanstack/react-query": "^5.103.0",
     "expo": "~57.0.23",
     "expo-constants": "~57.0.18",
+    "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
@@ -31,6 +32,7 @@
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
     "expo-secure-store": "~57.0.4",
+    "expo-sharing": "~57.0.20",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",

@@ -182,10 +182,21 @@ async function attempt(options: CompletionOptions, model: string): Promise<strin
     const text = await response.text();
 
     if (!response.ok) {
-      // The upstream body can quote the prompt back, which for this app means
-      // someone's spending. It goes in the log, never in the response.
+      /**
+       * The upstream body can quote the prompt back, and for this app a prompt
+       * contains someone's spending. It never reaches the response, and outside
+       * development it does not reach the log either: a log aggregator is a copy
+       * of your users' finances that nobody remembers taking.
+       *
+       * The status and the model are enough to diagnose a rate limit or a bad
+       * model name, which is what these logs are actually read for.
+       */
       logger.warn(
-        { status: response.status, model, body: text.slice(0, 500) },
+        {
+          status: response.status,
+          model,
+          ...(env.isProduction ? {} : { body: text.slice(0, 500) }),
+        },
         'groq request failed',
       );
 

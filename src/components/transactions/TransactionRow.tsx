@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -48,7 +49,7 @@ const CHIP_LABEL_MIN_WIDTH = 380;
  * money is still yours, it just moved. Showing "−₹10,000" for an ATM withdrawal
  * would be the row contradicting the totals above it.
  */
-export function TransactionRow({
+export const TransactionRow = memo(function TransactionRow({
   transaction,
   category,
   account,
@@ -162,4 +163,4 @@ export function TransactionRow({
       <Animated.View style={animatedStyle}>{content}</Animated.View>
     </Pressable>
   );
-}
+})

@@ -1,3 +1,4 @@
+export { AnimatedAmount, type AnimatedAmountProps } from './AnimatedAmount';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';

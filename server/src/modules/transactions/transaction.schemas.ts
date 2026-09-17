@@ -131,10 +131,31 @@ export const dailySchema = z
     path: ['to'],
   });
 
+/**
+ * An export names its own window explicitly.
+ *
+ * No defaults: "export my transactions" with an implied range is how someone ends
+ * up with a file covering this month when they wanted the year, and finds out
+ * after they have closed the account. Five years is the outer bound — long enough
+ * to be a real backup, short enough that one request cannot build a hundred
+ * megabytes of CSV in memory.
+ */
+export const exportSchema = z
+  .object({ from: isoDate, to: isoDate })
+  .refine((value) => value.from <= value.to, {
+    message: 'The start date must come before the end date',
+    path: ['from'],
+  })
+  .refine((value) => value.to.getTime() - value.from.getTime() <= 5 * 366 * 86_400_000, {
+    message: 'Export at most five years at a time',
+    path: ['to'],
+  });
+
 export const transactionIdParam = z.object({ id: objectId });
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
 export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>;
 export type SummaryQuery = z.infer<typeof summarySchema>;
+export type ExportQuery = z.infer<typeof exportSchema>;
 export type DailyQuery = z.infer<typeof dailySchema>;

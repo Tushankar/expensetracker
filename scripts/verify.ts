@@ -14,7 +14,8 @@ import {
 import { formatDayLabel, formatTime, groupByDay, monthRangeLabel } from '../src/utils/date';
 import { dayKeyOf, dayFromKey, monthKeyOf, periodRange } from '../src/utils/period';
 import { toBreakdown } from '../src/utils/breakdown';
-import { SUGGESTED_QUESTIONS } from '../src/api/types';
+import { SUGGESTED_QUESTIONS, isPaymentMethod, QUICK_ENTRY_EXAMPLES } from '../src/api/types';
+import { fileFromUri } from '../src/utils/upload';
 
 /**
  * Unit checks for the pure logic behind the screens.
@@ -505,6 +506,48 @@ test('every suggested question is one the server knows how to retrieve for', () 
 test('a suggested question fits the composer', () => {
   for (const question of SUGGESTED_QUESTIONS) {
     assert.ok(question.length > 0 && question.length <= 300, question);
+  }
+});
+
+// ------------------------------------------------------------------ uploads
+section('Receipt uploads');
+
+test('a picked file gets a name and a type the multipart part needs', () => {
+  // A missing MIME type makes the form part unreadable at the other end, and the
+  // failure arrives as a generic 400 with nothing useful in it.
+  assert.equal(fileFromUri('file:///tmp/IMG_0042.JPG').type, 'image/jpeg');
+  assert.equal(fileFromUri('file:///tmp/shot.png').type, 'image/png');
+  assert.equal(fileFromUri('file:///tmp/shot.png').name, 'receipt.png');
+});
+
+test('the picker\u2019s own MIME type wins when it gives one', () => {
+  assert.equal(fileFromUri('file:///tmp/x.heic', 'image/heic').type, 'image/heic');
+});
+
+test('a URI with a query string still yields an extension', () => {
+  assert.equal(fileFromUri('content://media/1234?w=100').type, 'image/jpeg');
+});
+
+// ---------------------------------------------------------------- quick entry
+section('Quick entry');
+
+test('a payment method off the wire is narrowed, not trusted', () => {
+  // Receipt extraction reads this off a photograph, so it arrives as an
+  // arbitrary string and has to be checked before it reaches a typed field.
+  assert.equal(isPaymentMethod('upi'), true);
+  assert.equal(isPaymentMethod('credit_card'), true);
+  assert.equal(isPaymentMethod('bitcoin'), false);
+  assert.equal(isPaymentMethod(null), false);
+  assert.equal(isPaymentMethod(undefined), false);
+});
+
+test('every example teaches the grammar in one glance', () => {
+  // Each has to hold a merchant and an amount, because that is the shape the
+  // examples are there to demonstrate.
+  for (const example of QUICK_ENTRY_EXAMPLES) {
+    assert.match(example, /\d/, `${example} has no amount`);
+    assert.match(example, /[A-Za-z]/, `${example} has no merchant`);
+    assert.ok(example.length <= 160, example);
   }
 });
 

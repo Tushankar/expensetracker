@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   API_BASE_URL,
+  errorMessage,
+  useExportTransactions,
   useLogout,
   useSession,
   useUnreadCount,
@@ -24,11 +26,14 @@ import {
   type IconName,
 } from '@/components/ui';
 import { ChangePasswordSheet } from '@/screens/sheets/ChangePasswordSheet';
+import { CloseAccountSheet } from '@/screens/sheets/CloseAccountSheet';
 import { EditProfileSheet } from '@/screens/sheets/EditProfileSheet';
 import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
 import { useAccentStore } from '@/store/themeStore';
 import { accentList, colorsByAccent, useTheme } from '@/theme';
-import { tapFeedback } from '@/utils/haptics';
+import { shareTextFile } from '@/services/exportFile';
+import { errorFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
 
 /**
  * Settings: who you are, how the app looks, and the way out.
@@ -54,6 +59,57 @@ export function SettingsScreen() {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+
+  const exportTransactions = useExportTransactions();
+  const showToast = useUiStore((state) => state.showToast);
+
+  /**
+   * Exports everything, not a period.
+   *
+   * A backup with a date filter on it is not a backup. Five years back is the
+   * server's own cap and comfortably older than this app, so in practice this is
+   * "all of it" without needing an endpoint that says so.
+   */
+  async function exportEverything() {
+    if (exportTransactions.isPending) return;
+    tapFeedback();
+
+    const now = new Date();
+    const from = new Date(now.getFullYear() - 5, now.getMonth(), 1);
+
+    try {
+      const file = await exportTransactions.mutateAsync({
+        from: from.toISOString(),
+        to: now.toISOString(),
+      });
+
+      if (file.rowCount === 0) {
+        showToast({
+          message: 'Nothing to export yet',
+          detail: 'Record a transaction and try again',
+          tone: 'neutral',
+        });
+        return;
+      }
+
+      const result = await shareTextFile({
+        filename: file.filename,
+        content: file.content,
+        mimeType: file.mimeType,
+        dialogTitle: 'Export transactions',
+      });
+
+      successFeedback();
+      showToast({
+        message: result.status === 'shared' ? 'Export ready' : 'Export saved',
+        detail: `${file.rowCount} ${file.rowCount === 1 ? 'transaction' : 'transactions'}`,
+      });
+    } catch (cause) {
+      errorFeedback();
+      showToast({ message: 'Could not export', detail: errorMessage(cause), tone: 'error' });
+    }
+  }
   /**
    * Bumped on open and used as each sheet's `key`, so its fields are seeded fresh
    * from the current profile. Because it only changes on the way in, the closing
@@ -292,6 +348,40 @@ export function SettingsScreen() {
         </View>
 
         <View style={{ marginTop: theme.spacing.xxxl }}>
+          <SectionHeader title="Your data" />
+          <Card padding={0} radius="xl">
+            <View style={{ paddingHorizontal: theme.spacing.lg }}>
+              <ListRow
+                title="Export transactions"
+                subtitle="A spreadsheet of everything, to keep or share"
+                leading={<IconTile name="package" color={theme.colors.brandText} />}
+                onPress={() => void exportEverything()}
+                accessibilityHint="Creates a CSV file and opens the share sheet"
+                trailing={
+                  exportTransactions.isPending ? (
+                    <Text variant="caption" tone="tertiary">
+                      Preparing…
+                    </Text>
+                  ) : null
+                }
+              />
+              <Divider inset={44 + theme.spacing.md} />
+              <ListRow
+                title="Close account"
+                subtitle="Deletes everything, permanently"
+                leading={<IconTile name="trash" color={theme.colors.negative} />}
+                showChevron
+                onPress={() => {
+                  tapFeedback();
+                  setCloseOpen(true);
+                }}
+                accessibilityHint="Opens the account deletion confirmation"
+              />
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xxxl }}>
           <SectionHeader title="App" />
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
@@ -347,6 +437,8 @@ export function SettingsScreen() {
         visible={profileOpen}
         onClose={() => setProfileOpen(false)}
       />
+      <CloseAccountSheet visible={closeOpen} onClose={() => setCloseOpen(false)} />
+
       <ChangePasswordSheet
         key={`password-${sheetSession}`}
         visible={passwordOpen}

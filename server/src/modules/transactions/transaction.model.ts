@@ -48,8 +48,16 @@ transactionSchema.index({ userId: 1, accountId: 1, date: -1 });
 transactionSchema.index({ userId: 1, categoryId: 1, date: -1 });
 // Transfers are found from either side, and the balance recalculation reads both.
 transactionSchema.index({ userId: 1, destinationAccountId: 1, date: -1 });
-// Free-text search over the two fields a person actually remembers.
-transactionSchema.index({ merchant: 'text', description: 'text' });
+/**
+ * Deliberately no `$text` index.
+ *
+ * Search is a case-insensitive substring match, because people type "swig" and
+ * expect Swiggy — which a stemmed, word-boundary text search does not return. A
+ * text index would therefore never be consulted by any query this app makes,
+ * while still costing a write on every insert and update to the largest
+ * collection here. The regex runs inside the `userId` index bound, so it scans
+ * one person's transactions rather than the collection.
+ */
 
 export type Transaction = InferSchemaType<typeof transactionSchema>;
 

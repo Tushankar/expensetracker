@@ -6,6 +6,7 @@ import { currentUser, requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { passwordSchema } from '../auth/auth.schemas';
 
+import { deleteUserAccount } from './deletion.service';
 import { changePassword, getProfile, updateProfile } from './user.service';
 
 export const userRouter: Router = Router();
@@ -54,4 +55,28 @@ userRouter.post('/me/password', validate({ body: changePasswordSchema }), async 
   const { currentPassword, newPassword } = req.body as z.infer<typeof changePasswordSchema>;
   await changePassword(currentUser(req).id, currentPassword, newPassword);
   noContent(res);
+});
+
+const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Enter your password to confirm').max(72),
+  /**
+   * A typed confirmation, checked on the server rather than only in the app.
+   *
+   * The app asks for it too, but a destructive endpoint that can be triggered by
+   * a single malformed request is a destructive endpoint waiting to be triggered
+   * by one.
+   */
+  confirm: z.literal('DELETE'),
+});
+
+/**
+ * Deletes the account and everything in it. Cannot be undone.
+ *
+ * Password-confirmed, because a stolen access token should not be enough to
+ * destroy someone's records — and every session dies with the account, so the
+ * token used to make this call stops working the moment it succeeds.
+ */
+userRouter.delete('/me', validate({ body: deleteAccountSchema }), async (req, res) => {
+  const { password } = req.body as z.infer<typeof deleteAccountSchema>;
+  ok(res, { deleted: await deleteUserAccount(currentUser(req).id, password) });
 });

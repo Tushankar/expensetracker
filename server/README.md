@@ -1,8 +1,9 @@
 # Paisa API
 
 The backend for the Paisa expense tracker: authentication, accounts, categories,
-transactions, budgets, recurring rules, analytics and the AI assistant. Node +
-Express 5 + TypeScript + Mongoose, everything under `/api/v1`.
+transactions, budgets, recurring rules, analytics, the AI assistant, quick-text
+entry, merchant memory and receipts. Node + Express 5 + TypeScript + Mongoose,
+everything under `/api/v1`.
 
 Every financial number in the product is produced here. The assistant is given those
 numbers already worked out and is only allowed to phrase them — see
@@ -20,11 +21,18 @@ npm run seed             # optional: a demo user with a month of transactions
 npm run test:api         # core integration tests, against the running server
 npm run test:step        # budgets, recurring, notifications, time zones
 npm run test:ai          # analytics, grounding, the guards around the assistant
+npm run test:step5       # the quick-text parser, merchant memory, receipts
+npm run test:step6       # isolation, API shape, export, account deletion
 ```
 
 `GROQ_API_KEY` is optional. Without it every AI endpoint still answers, using the
 deterministic wording the analytics service produces, and `/ai/status` reports
-`available: false` so the app can explain rather than fail.
+`available: false` so the app can explain rather than fail. The quick-text parser
+does not need it at all — amounts, dates and payment methods are read by rule.
+
+`CLOUDINARY_*` is optional too, and all three or none. Without them
+`/receipts/status` reports `storage: false`, the app hides the camera button, and
+nothing else changes.
 
 Generate the secrets with:
 
@@ -75,6 +83,18 @@ transaction.
 | `POST` | `/ai/ask` | `{ question, from, to, … }` — retrieval, then narration. |
 | `GET`/`DELETE` | `/ai/chat` | The transcript. 30-day TTL. |
 | `POST` | `/ai/categorise` | `{ merchant, description?, amount?, type? }` — a proposal. Writes nothing. |
+| `POST` | `/ai/parse` | `{ text }` — "Petrol 1200" to a proposed transaction. Writes nothing. |
+| `GET` | `/merchants` | `?q&limit` — names this user has used, most-used first. |
+| `GET` | `/merchants/recall` | `?merchant` — what they usually file it under. No model. |
+| `DELETE` | `/merchants` | `{ merchant }` — forgets one. |
+| `GET` | `/receipts/status` | Whether storage and reading are configured. |
+| `POST` | `/receipts/signature` | A signed permission to upload one image. |
+| `GET`/`POST` | `/receipts` | List, or record an upload after verifying its signature. |
+| `GET`/`DELETE` | `/receipts/:id` | Delete removes the row and the stored image. |
+| `POST` | `/receipts/:id/extract` | Reads the image. Applies nothing. |
+| `POST` | `/receipts/:id/attach` | `{ transactionId }` — or `null` to unlink. |
+| `GET` | `/transactions/export` | `?from&to` — the ledger as CSV, in the usual envelope. |
+| `DELETE` | `/users/me` | `{ password, confirm: "DELETE" }` — deletes everything. Final. |
 
 List filters: `page`, `limit` (max 100), `type`, `accountId`, `categoryId`,
 `paymentMethod`, `q`, `from`, `to`, `minAmount`, `maxAmount`, `sort`
@@ -326,6 +346,151 @@ thinking and returns an empty generation, which Groq then rejects as invalid JSO
 Classification and extraction therefore ask for `reasoning: 'low'` and a budget with
 room to spare.
 
+## Fast entry
+
+### The parser never asks a model for a number
+
+`modules/ai/quickEntry.ts` is pure functions with no network and no state. The amount,
+the date and the payment method are found by rule; only the *category* is ever
+inferred. Same principle as the assistant, and it matters more here — this is the one
+endpoint whose output gets saved rather than merely read.
+
+Two details that are easy to get wrong:
+
+**The date and the method are removed before the amount is searched for.** Both contain
+digits. "rent 25000 on 1 sep" holds a 1 that is plainly not money, and scanning the raw
+string finds two candidates, takes the larger and reports an ambiguity the parser
+invented. Ordering the passes is the fix, not a cleverer regex.
+
+**A long digit run is not an amount.** A UPI reference is the most common long number
+on a payment screen, and reading `419238712344` as rupees would record a transaction
+for eleven lakh.
+
+`/ai/parse` returns a proposal with its own `confidence` and a list of `warnings` in
+plain words, plus the substring each field was read from so the app can show its
+working. It writes nothing. Everything is confirmed in the app before it becomes a
+transaction.
+
+## Merchant memory
+
+`MerchantMemory` holds one row per **(user, merchant, category)**, not one per
+merchant. That is what makes a correction work rather than a coin flip: filing Amazon
+under Shopping nine times and then once under Electronics records a second opinion that
+has to earn its place, instead of erasing the nine. Recall takes the highest count, ties
+broken by recency.
+
+Storing only the winner would make the most recent tap authoritative, and one mistyped
+category would poison that merchant forever.
+
+`merchantKey()` collapses `IndianOil`, `INDIAN OIL`, `indian-oil` and
+`Indian Oil #44121` onto one key — every separator goes, and digit runs of four or more
+are stripped as references while short ones stay, because `7 Eleven` is a name. Without
+that collapse the memory accumulates twenty rows of one each and never reaches a
+confident answer.
+
+Learning happens **after** a transaction is written, never before, because what someone
+saved is the only thing they have actually confirmed. Accepting a suggestion and
+correcting one arrive at the same call. Failures are swallowed: refusing to record an
+expense because a statistics row would not upsert is not a trade anyone would make.
+
+`suggestCategory` consults **memory → brand table → model**, and returns which in
+`source`. The app renders that distinction, because the three do not deserve equal
+trust.
+
+## Receipts
+
+### The bytes never pass through here
+
+The app asks for a signed ticket, uploads straight to Cloudinary, and reports what came
+back. This server verifies that report against the same secret before storing a thing.
+
+Proxying the image instead would double the transfer, hold a Node process open for the
+length of a mobile upload, and make the phone's progress bar a fiction — it would fill
+as the phone finished talking to us, not as the image finished arriving.
+
+`lib/cloudinary.ts` is the whole integration: two HTTP calls and a SHA-1. The official
+SDK brings a config singleton and a streaming upload API this server deliberately does
+not use.
+
+**Signed, not unsigned.** An unsigned upload preset is a public write endpoint on your
+account that anyone who opens the app bundle can find, and it cannot constrain where
+the file lands. Here the server picks the folder — per user — and the public id, the
+signature covers both, and a client that edits either has a signature that no longer
+matches.
+
+**`verifyUpload` is not optional.** Without it this is an endpoint that takes an
+arbitrary URL from a client and hands it to every other client to render, under the
+heading "your receipt". Cloudinary signs its own response over the public id and the
+version; recomputing that here is what makes the rest of the payload safe to believe.
+
+### Reading them
+
+`GROQ_VISION_MODEL` — `qwen/qwen3.8-27b` by default, because that is what this account
+actually has. Vision is a separate capability from prose and `GET /models` is the
+authority, not the documentation.
+
+This is the only place in the system where a model produces a number nothing else can
+check. Everywhere else a figure is computed from the database or matched by rule. Here
+the ground truth is a photograph, so the safety moves from verification to consent:
+
+- Nothing extracted is written to a transaction. `/receipts/:id/extract` stores the
+  reading on the *receipt*, beside the expense rather than merged into it.
+- The model returns the printed line it read the total from, so a person can check the
+  figure against the paper rather than trust it.
+- Illegible fields come back `null`. The prompt says so three times, and a total that
+  is zero, negative or above a crore is rejected as a misread.
+- Downgrading to the small model on a rate limit is disabled, because it cannot see —
+  it would return a confident description of an image it never received.
+
+Keeping the extraction beside the transaction rather than inside it also preserves the
+interesting case: a split bill, a tip added later or a partial refund produces an honest
+mismatch between what the receipt said and what was recorded, and flattening the two
+would destroy the evidence exactly when it starts to matter.
+
+## Export and deletion
+
+`GET /transactions/export` returns a CSV inside the normal envelope rather than as a
+file download. Every other endpoint answers the same shape, the app has to write the
+file locally before it can be shared anyway, and a one-off content type would be a
+special case in the client for no gain. The window is required and capped at five
+years — an export with an implied range is how someone ends up with a file covering
+this month when they wanted the year, and finds out after they have closed the
+account.
+
+`DELETE /users/me` is the only call in the API that cannot be undone, so it takes the
+password and a typed `confirm: "DELETE"`. Both are checked here rather than only in
+the app: a destructive endpoint that fires on a single malformed request is a
+destructive endpoint waiting to fire on one.
+
+It deletes rather than flags. Images go first and best-effort — Cloudinary being slow
+must not leave someone unable to close their account — then every collection, then the
+user. The collections are an explicit list rather than a loop over registered models,
+because a new module that silently fails to be cleaned up is a privacy bug nothing
+would catch; an explicit list at least shows up in a diff. `step6test` creates
+something in each one and then goes looking for it.
+
+Two things that are easy to get wrong and are asserted:
+
+- **The shared category tree survives.** Per-user copies carry a `userId`; the
+  defaults carry `null`. A careless `$or` in the delete would empty the tree for
+  every account at once.
+- **The session dies with the account.** Refresh tokens are deleted too, so the token
+  that made the call stops working the moment it succeeds.
+
+## Performance notes
+
+**No `$text` index on transactions.** Search is a case-insensitive substring match,
+because people type "swig" and expect Swiggy — which a stemmed, word-boundary text
+search does not return. A text index would therefore never be consulted by any query
+this app makes while still costing a write on every insert to the largest collection
+here. The regex runs inside the `userId` index bound, so it scans one person's
+transactions rather than the collection.
+
+**Every index is compound and starts with `userId`**, because every query does. The
+list, each filter, the calendar and the analytics facet all narrow to one person
+first; an index that did not would have the database sort the whole collection to
+answer "my last 25 transactions".
+
 ## Layout
 
 ```
@@ -336,11 +501,14 @@ src/
   lib/time     Timezone and recurrence arithmetic (Luxon)
   modules/     auth · users · accounts · categories · transactions
                budgets · recurring (+ scheduler) · notifications
-               analytics (aggregation only) · ai (groq client, guard, prompts)
+               analytics (aggregation only) · ai (groq client, guard, prompts,
+               quick-entry parser) · merchants (memory) · receipts (+ reader)
                (each: model, schemas, service, routes — controllers where they earn it)
+  lib/         …and cloudinary: signing, verification, derived URLs
   routes/      v1 router
   seed/        the Indian default category tree, and per-user seeding
-  scripts/     seed (demo data), apitest + steptest + aitest (integration tests)
+  scripts/     seed (demo data), apitest + steptest + aitest + step5test,
+               fixtures/ (a rendered receipt, for the reader's tests)
 ```
 
 Services never touch `req`/`res`; routes never touch Mongoose. That split is what lets
