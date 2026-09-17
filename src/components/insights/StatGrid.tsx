@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import type { AnalyticsOverview } from '@/api/types';
 import { Card, Icon, Text, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
-import { formatINR } from '@/utils/currency';
+import { formatINR, formatPercent } from '@/utils/currency';
 
 export type StatGridProps = {
   overview: AnalyticsOverview;
@@ -61,7 +61,7 @@ export function StatGrid({ overview }: StatGridProps) {
         />
         <Stat
           label="Savings rate"
-          value={overview.savingsRate === null ? '—' : `${Math.round(overview.savingsRate)}%`}
+          value={overview.savingsRate === null ? '—' : formatPercent(overview.savingsRate)}
           icon="target"
           accent={theme.colors.brandText}
           hint={overview.savingsRate === null ? 'No income recorded' : undefined}
@@ -117,7 +117,7 @@ function Stat({ label, value, icon, accent, delta, hint }: StatProps) {
         accessible
         accessibilityLabel={
           delta
-            ? `${label}, ${value}, ${Math.abs(Math.round(delta.percent))} percent ${rose ? 'up' : 'down'}`
+            ? `${label}, ${value}, ${formatPercent(Math.abs(delta.percent))} ${rose ? 'up' : 'down'}`
             : `${label}, ${value}`
         }
         style={{ gap: 6 }}
@@ -140,7 +140,7 @@ function Stat({ label, value, icon, accent, delta, hint }: StatProps) {
 
         {delta ? (
           <Text variant="caption" color={deltaColor} numberOfLines={1}>
-            {`${rose ? '↑' : '↓'} ${Math.abs(Math.round(delta.percent))}% vs last`}
+            {`${rose ? '↑' : '↓'} ${formatPercent(Math.abs(delta.percent))} vs last`}
           </Text>
         ) : (
           <Text variant="caption" tone="tertiary" numberOfLines={1}>

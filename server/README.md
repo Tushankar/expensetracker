@@ -1,7 +1,12 @@
 # Paisa API
 
-The backend for the Paisa expense tracker: authentication, accounts, categories and
-transactions. Node + Express 5 + TypeScript + Mongoose, everything under `/api/v1`.
+The backend for the Paisa expense tracker: authentication, accounts, categories,
+transactions, budgets, recurring rules, analytics and the AI assistant. Node +
+Express 5 + TypeScript + Mongoose, everything under `/api/v1`.
+
+Every financial number in the product is produced here. The assistant is given those
+numbers already worked out and is only allowed to phrase them — see
+[The assistant](#the-assistant).
 
 ## Running it
 
@@ -14,7 +19,12 @@ npm run dev              # http://localhost:4000/api/v1
 npm run seed             # optional: a demo user with a month of transactions
 npm run test:api         # core integration tests, against the running server
 npm run test:step        # budgets, recurring, notifications, time zones
+npm run test:ai          # analytics, grounding, the guards around the assistant
 ```
+
+`GROQ_API_KEY` is optional. Without it every AI endpoint still answers, using the
+deterministic wording the analytics service produces, and `/ai/status` reports
+`available: false` so the app can explain rather than fail.
 
 Generate the secrets with:
 
@@ -58,6 +68,13 @@ transaction.
 | `GET` | `/notifications/unread-count` | Just the badge. |
 | `POST` | `/notifications/:id/read`, `/read-all` | |
 | `POST`/`DELETE` | `/notifications/device` | Push token registration. |
+| `GET` | `/analytics/overview` | `?from&to&previousFrom&previousTo&label` — every figure the Insights tab shows, in one aggregation. |
+| `GET` | `/analytics/trend` | `?months=2..24` — a zero-filled monthly series. |
+| `GET` | `/ai/status` | Whether a model is configured. |
+| `GET` | `/ai/summary` | `?from&to…` — the summary card and the insight cards, from one overview. |
+| `POST` | `/ai/ask` | `{ question, from, to, … }` — retrieval, then narration. |
+| `GET`/`DELETE` | `/ai/chat` | The transcript. 30-day TTL. |
+| `POST` | `/ai/categorise` | `{ merchant, description?, amount?, type? }` — a proposal. Writes nothing. |
 
 List filters: `page`, `limit` (max 100), `type`, `accountId`, `categoryId`,
 `paymentMethod`, `q`, `from`, `to`, `minAmount`, `maxAmount`, `sort`
@@ -216,10 +233,98 @@ one outright would orphan months of transactions and silently change totals for
 periods that are already closed. The `DELETE` response says which happened
 (`{ deleted, archived }`) so the client can word the toast correctly.
 
+**Analytics is one `$facet`, not five queries.** Totals, the category split, the
+largest expenses, the daily buckets and the weekly buckets all come out of a single
+pass over the same matched set. Day and week keys are produced with `$dateToString` in
+the account holder's own zone, so a late-night expense lands on the day they had it.
+
+**The daily average divides by days elapsed, not days in the period.** Dividing a
+half-finished September by 30 understates it by half and makes the projection that
+follows wrong. `projectedTotal` is null once the period is over, because extrapolating
+a finished month is not a forecast.
+
 **Login is constant-time-ish about unknown emails.** A missing user still pays for a
 bcrypt comparison before the same "Email or password is incorrect" comes back;
 otherwise the endpoint reports which of a million addresses are registered purely by
 how fast it says no.
+
+## The assistant
+
+### The one rule
+
+**No number reaches a user unless this server computed it.**
+
+`analytics.service.ts` is the only place a financial figure is produced, and it
+computes every derived one too — deltas, shares, averages, projections — so the model
+never has a reason to reach for a calculator. `ai.prompts.ts` renders those figures as
+pre-formatted strings; the model never sees a raw integer.
+
+Then `ai.guard.ts` checks the result. `checkGrounding` extracts every rupee amount,
+percentage and number from the reply and rejects any that does not appear in the fact
+sheet, comparing on the digits alone so spacing and separators do not matter. Numbers
+at or below 31 with no currency or percent marker pass as counts — refusing "your top
+3 categories" would make the assistant unusable without making it safer.
+
+A rejected reply is regenerated once, with the offending figures named in the retry.
+If it invents again, the reply is discarded and the caller's deterministic text is
+returned with `fromModel: false`. The app labels that **Computed**.
+
+Ask a model to summarise "₹28,450 this month, ₹24,100 last month" and it will very
+often volunteer "…an increase of ₹4,350". The arithmetic is usually right, which is
+precisely the danger: nothing checked it, and the one that is wrong looks identical.
+
+### Retrieval before generation
+
+`POST /ai/ask` never hands a question to a model and hopes. It resolves an intent
+first — `total_spend`, `category_spend`, `savings`, `income`, `largest_expenses`,
+`top_category`, `comparison`, `budget_status`, `today`, `advice`, `general` — with the
+model classifying and a keyword matcher as the fallback. **That classification never
+involves a number.**
+
+The server then queries MongoDB for exactly what the intent needs and passes only the
+result to the model, whose entire job is to phrase it. The retrieved figures come back
+in `answer.context` so the app can show its working.
+
+Advice questions are answered without any model call at all: they are matched and
+declined here, because a model told not to give financial advice usually complies, and
+"usually" is not a standard to hold financial advice to.
+
+`getCategoriesSpend` exists because of a real bug. A question about a *group* ("food")
+was being answered by summing that group's categories out of the overview's top-N
+list, which is truncated — anything past the cut-off silently vanished and the answer
+came back low. Group questions now aggregate over every category in the group.
+
+### Safety, and where each rule lives
+
+| Rule | Enforced by |
+| --- | --- |
+| Never invent a transaction or a figure | `checkGrounding` + the deterministic fallback |
+| Never claim a transaction exists | Retrieval returns real rows or none |
+| Never modify data without confirmation | No AI route writes anything |
+| Never give investment advice | `ADVICE_QUESTION` declines server-side; `containsInvestmentAdvice` scans generated text too |
+| Never present an assumption as fact | Projections are labelled estimates in the prompt |
+| Say when the data is thin | `isLimitedData` — fewer than five expenses |
+
+### The key, and the budget
+
+`groq.client.ts` is the only file that reads `GROQ_API_KEY`. Nothing else in the
+system can reach Groq, and the key never leaves the server.
+
+Rate limiting is per authenticated user, not per IP — the thing worth limiting is one
+account asking a hundred questions a minute, not a household sharing a connection.
+`ipKeyGenerator` handles the unauthenticated fallback, so a caller cannot mint keys
+out of an IPv6 range.
+
+Groq meters tokens per minute. A 429 is retried once after the delay Groq itself
+suggests, then attempted on the smaller model, which has its own budget, and only then
+given up on. Quality degrades one notch at a time — best model, smaller model, computed
+text — instead of collapsing to canned wording on the first rate limit.
+
+One non-obvious thing about the gpt-oss models: reasoning tokens are drawn from
+`max_completion_tokens`. A structured call with a tight budget spends it all on
+thinking and returns an empty generation, which Groq then rejects as invalid JSON.
+Classification and extraction therefore ask for `reasoning: 'low'` and a budget with
+room to spare.
 
 ## Layout
 
@@ -231,10 +336,11 @@ src/
   lib/time     Timezone and recurrence arithmetic (Luxon)
   modules/     auth · users · accounts · categories · transactions
                budgets · recurring (+ scheduler) · notifications
+               analytics (aggregation only) · ai (groq client, guard, prompts)
                (each: model, schemas, service, routes — controllers where they earn it)
   routes/      v1 router
   seed/        the Indian default category tree, and per-user seeding
-  scripts/     seed (demo data), apitest + steptest (integration tests)
+  scripts/     seed (demo data), apitest + steptest + aitest (integration tests)
 ```
 
 Services never touch `req`/`res`; routes never touch Mongoose. That split is what lets

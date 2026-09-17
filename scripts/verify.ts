@@ -5,6 +5,7 @@ import {
   formatAmountInput,
   formatCompactINR,
   formatINR,
+  formatPercent,
   groupIndian,
   paiseToRupeeInput,
   percentChange,
@@ -418,6 +419,17 @@ test('a day key is the local day, not the UTC one', () => {
   const lateNight = new Date(2026, 8, 30, 23, 45);
   assert.equal(dayKeyOf(lateNight), '2026-09-30');
   assert.equal(monthKeyOf(lateNight), '2026-09');
+});
+
+test('a percentage reads the same on a tile as it does in a sentence', () => {
+  // The savings rate appears on a stat tile and inside generated prose on the
+  // same screen. This matches `percent()` in the server's ai.prompts.ts; if the
+  // two drift, one number on screen contradicts the other.
+  assert.equal(formatPercent(59.79), '59.8%');
+  assert.equal(formatPercent(60), '60%');
+  assert.equal(formatPercent(60.04), '60%');
+  assert.equal(formatPercent(0), '0%');
+  assert.equal(formatPercent(120.55), '120.6%');
 });
 
 // ------------------------------------------------------------------ breakdown

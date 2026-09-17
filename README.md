@@ -6,11 +6,19 @@ An India-first personal expense tracker: a React Native app and the Node API beh
 **Step 2** replaced all of it with a real backend: accounts, categories,
 transactions and transfers, JWT auth with refresh, and a mobile data layer that
 handles loading, errors, empty states and lost connections.
-**Step 3 — this** — turned it into a daily dashboard: budgets, recurring
-transactions, a notification system, a calendar view, and week / month / custom
-date periods throughout.
+**Step 3** turned it into a daily dashboard: budgets, recurring transactions, a
+notification system, a calendar view, and week / month / custom date periods
+throughout.
+**Step 4 — this** — added the analytics layer and a financial assistant on Groq:
+an Insights tab, a monthly summary and insight cards, a chat you can ask about
+your own money, and category suggestions on the entry sheet.
 
-AI and receipt scanning are deliberately not here yet.
+Receipt scanning is deliberately not here yet.
+
+The assistant does not calculate anything. Every figure it states is produced by
+MongoDB aggregation first, and a reply containing a number the server did not
+compute is rejected before it reaches the app. [The assistant](#the-assistant)
+explains how that is enforced.
 
 ## Running it
 
@@ -43,11 +51,11 @@ for a tunnel or a deployed server, and restart the bundler afterwards (Metro inl
 | --- | --- |
 | `npm run typecheck` | App and scripts. |
 | `npm run lint` | |
-| `npm run verify` | 40 unit checks + 15 API-client behaviour tests. No server needed. |
-| `npm run verify:e2e` | 45 checks of the mobile data layer against a running API. |
-| `npm run server:test` | 115 integration tests of the API against the real database. |
+| `npm run verify` | 48 unit checks + 15 API-client behaviour tests. No server needed. |
+| `npm run verify:e2e` | 54 checks of the mobile data layer against a running API. |
+| `npm run server:test` | 168 integration tests of the API against the real database. |
 
-All five pass — 215 checks. The last two need `npm run server` in another
+All five pass — 285 checks. The last two need `npm run server` in another
 terminal.
 
 What the suites are for, in order: `verify` covers the pure logic that is easy to get
@@ -61,7 +69,14 @@ or spend from another's account. `test:step` covers the parts most likely to be
 subtly wrong: that "monthly on the 31st" survives February, that a rule resumed after
 three months does not write three backdated charges, that an 11pm expense on the last
 of the month counts against *that* month's budget, and that crossing a cap alerts you
-exactly once.
+exactly once. `test:ai` covers the analytics aggregations and every guard around the
+assistant — that a model which states a figure the data does not contain is retried
+once and then discarded, that an advice question never reaches a model at all, and
+that asking for a category suggestion writes nothing.
+
+The grounding tests run entirely in-process, with no Groq and no database. That is
+deliberate: the point of the guard is that it behaves identically whether the model is
+brilliant, broken or absent, so feeding it a live model would test the wrong thing.
 
 What none of them cover: React rendering. Layout, gestures and animation still need a
 device.
@@ -82,6 +97,7 @@ device.
 | Charts | Hand-built on `react-native-svg` | — |
 | Icons | Hand-authored SVG paths, ~95 glyphs | — |
 | Scheduler | — | In-process interval, idempotent by occurrence count |
+| Assistant | — | Groq (`openai/gpt-oss-120b`), server-side only |
 
 ## Layout
 
@@ -96,13 +112,14 @@ src/
     home/       Home composites
     dashboard/  Period selector, budget snapshot, upcoming strip
     budgets/    Budget progress row
+    insights/   Stat grid, summary card, insight cards, chat bubbles
     transactions/ Row, day-grouped list, calendar view
     activity/   Activity composites
     data/       QueryState — the shared loading / error / empty boundary
   navigation/   Stack + tabs, custom TabBar
   screens/      One file per screen; sheets/ for modal surfaces
   store/        Auth (persisted to the keychain), UI, accent
-  utils/        Currency, dates, periods, haptics
+  utils/        Currency, dates, periods, breakdown, haptics
 scripts/        Checks that run under Node, and stubs for the native modules
 server/         The API. Has its own README.
 ```
@@ -166,6 +183,122 @@ A toggle on Activity, because it is a second way into the same transactions rath
 than a separate feature. Days are tinted by what they cost, scaled against the
 busiest day of the visible month so a ₹2,000 month and a ₹90,000 month both read.
 Selecting a day shows its count, its total and its transactions.
+
+## Insights
+
+A fourth tab, sitting between Activity and Budgets. Four stat tiles — spent, earned,
+kept, savings rate — then the assistant's read on the period, then the working
+underneath it: the category donut, spending by week, the categories that moved most
+against the previous period, the largest single expenses, and a six-month trend.
+
+Three details that are easy to get wrong:
+
+**The daily average divides by the days that have elapsed, not the days in the
+period.** Dividing a half-finished September by 30 understates it by half and makes
+every projection that follows wrong. The projection disappears entirely once the
+period is over, because extrapolating a finished month is not a forecast, it is a
+mistake.
+
+**Deltas only appear when there is something to compare against.** "Up 100% on last
+month" from an empty month is noise dressed as a finding, so the tiles show a change
+only when the previous window had activity.
+
+**The donut's "Others" band is the remainder from the period total, not the sum of the
+tail.** The overview endpoint returns only the top categories; a chart whose slices add
+to 100% of a number that is not the total is the most convincing way to be wrong.
+`toBreakdown` takes the difference from the real total, so whatever the server left out
+still shows up. Both Home and Insights use it, and it is unit-tested.
+
+Settings moved off the tab bar to make room, and is reached from the avatar on Home.
+Five tabs plus the add button would have narrowed the four screens people open daily
+to serve one they open weekly.
+
+## The assistant
+
+**React Native → Node → Groq.** The key lives in the server's environment and is read
+in exactly one file. It is never sent to the app: `EXPO_PUBLIC_*` values are inlined
+into the JavaScript bundle, and a bundle is a zip anyone can open.
+
+### The model never calculates
+
+Ask a model to summarise "₹28,450 this month, ₹24,100 last month" and it will very
+often reply "…an increase of ₹4,350". The arithmetic happens to be right, and that is
+exactly the problem: nothing checked it, nothing will, and the next one will be wrong
+in a way nobody notices.
+
+So the pipeline is built the other way round:
+
+1. **`analytics.service.ts` computes everything**, including every derived figure —
+   deltas, shares, averages, projections — in a single `$facet` aggregation. It is the
+   only place in the system where a financial number is produced.
+2. **`buildFactSheet` renders those figures as pre-formatted strings.** The model never
+   sees a raw integer, so it has nothing to add up.
+3. **The system prompt forbids calculation**, repeatedly and in those words.
+4. **`checkGrounding` rejects the reply if it contains any figure not present verbatim
+   in the fact sheet.** Comparison is on the digits alone, so spacing and separators do
+   not matter. Small bare numbers are allowed through as counts — refusing "your top 3
+   categories" would make the assistant unusable without making it safer.
+5. **One retry, naming the offending figures.** If it invents again, the reply is
+   discarded and the server's own deterministic wording is sent instead.
+
+That fallback is labelled **Computed** in the app rather than hidden. The figures are
+identical either way, and quietly passing off a fallback as the assistant is the kind
+of small dishonesty that costs trust in every other number on the screen.
+
+### Questions are retrieved, not guessed
+
+`POST /ai/ask` resolves an intent first — `category_spend`, `savings`,
+`largest_expenses`, `comparison`, `budget_status` and so on — and that classification
+never involves a number. The server then queries MongoDB itself for exactly what the
+question needs and hands the model the result, with the only instruction being to
+phrase it. The reply comes back with the retrieved figures attached, and the chat shows
+them under the answer: the category matched, the total read, the transactions counted.
+An answer you can check beats an answer you have to trust.
+
+Intent resolution asks the model but falls back to keyword matching, which is why a
+Groq outage degrades the wording rather than taking the feature down.
+
+### The safety rules, and where each one lives
+
+| Rule | Enforced by |
+| --- | --- |
+| Never invent a transaction or a figure | `checkGrounding`, then the deterministic fallback |
+| Never claim a transaction exists | Retrieval returns real rows or none; the model is given no room to add any |
+| Never modify data without confirmation | No AI route writes. Categorisation returns a proposal the user taps to accept |
+| Never make investment recommendations | Advice questions are matched and declined server-side, never sent to a model; generated text is scanned for advice phrasing as well |
+| Never present an assumption as fact | Projections are labelled estimates in the prompt and on screen |
+| Say when the data is thin | Fewer than five expenses sets `limitedData`, and the card says so |
+
+### Costs and limits
+
+Twenty AI requests per minute per **user** — keyed on the authenticated id, not the IP,
+because the thing worth limiting is one account asking a hundred questions a minute,
+not a household sharing a connection.
+
+Groq meters tokens per minute, and a busy Insights screen can walk into that: a summary,
+its insight cards and a question in quick succession. Rather than give up on the first
+429 the client retries once after the delay Groq itself suggests, then falls back to the
+smaller model, which has its own budget, and only then to computed text. Quality
+degrades one notch at a time.
+
+The summary query holds its result for five minutes and does not refetch on mount —
+every refetch is a Groq call, and re-narrating the same figures because someone switched
+tabs is a cost with no benefit. The figures underneath come from the analytics query,
+which refreshes normally.
+
+Without `GROQ_API_KEY` the whole feature still works: every endpoint answers with the
+server's own wording, and `/ai/status` tells the app so it can explain rather than fail.
+
+### Category suggestions
+
+The entry sheet asks once, when the merchant field is finished with — on blur, not on
+change, because a request per keystroke is eleven calls to type "Indian Oil" and the
+answer is only useful once the name is whole. Common Indian brands are matched locally
+and never leave the device.
+
+What comes back is a proposal: the category, a confidence, and the reason. Nothing is
+filed until "Use" is tapped. An assistant that categorised on its own would put its
+mistakes into a chart six weeks later with no way to trace them.
 
 ## How the pieces fit
 

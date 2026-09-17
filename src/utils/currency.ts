@@ -82,6 +82,18 @@ function trim(value: number): string {
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
 }
 
+/**
+ * A percentage, at the precision the assistant uses.
+ *
+ * Matched deliberately to `percent()` in the server's `ai.prompts.ts`: the savings
+ * rate appears both on a stat tile and inside a generated sentence on the same
+ * screen, and "60%" beside "59.8%" reads as two different figures. One decimal,
+ * with a whole number left whole.
+ */
+export function formatPercent(value: number): string {
+  return `${trim(value)}%`;
+}
+
 /** Percentage change between two amounts; null when there is no baseline. */
 export function percentChange(current: Paise, previous: Paise): number | null {
   if (previous === 0) return null;
