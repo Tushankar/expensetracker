@@ -24,6 +24,7 @@ export const queryKeys = {
     ['recurring', 'upcoming', withinDays, limit] as const,
   notifications: ['notifications'] as const,
   unreadCount: ['notifications', 'unread-count'] as const,
+  notificationPreferences: ['notifications', 'preferences'] as const,
 
   analytics: (range: Record<string, unknown>) => ['analytics', 'overview', range] as const,
   trend: (months: number) => ['analytics', 'trend', months] as const,

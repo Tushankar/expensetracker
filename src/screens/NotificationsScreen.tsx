@@ -18,6 +18,7 @@ import {
   IconTile,
   PageHeader,
   Screen,
+  SectionHeader,
   SkeletonRow,
   Text,
   type IconName,
@@ -30,7 +31,13 @@ const ICON: Record<NotificationType, IconName> = {
   budget_warning: 'alertTriangle',
   budget_exceeded: 'alertCircle',
   recurring_upcoming: 'clock',
+  recurring_due: 'calendar',
   recurring_created: 'repeat',
+  money_owed_due: 'user',
+  repayment_due: 'card',
+  unusual_spending: 'trendingUp',
+  monthly_summary: 'pieChart',
+  system: 'bell',
 };
 
 function accentFor(type: NotificationType, theme: Theme): string {
@@ -38,29 +45,59 @@ function accentFor(type: NotificationType, theme: Theme): string {
     case 'budget_exceeded':
       return theme.colors.negative;
     case 'budget_warning':
+    case 'recurring_due':
+    case 'repayment_due':
+    case 'unusual_spending':
       return theme.colors.warning;
     case 'recurring_upcoming':
       return theme.colors.info;
+    case 'money_owed_due':
+    case 'monthly_summary':
+      return theme.colors.brand;
+    case 'recurring_created':
+      return theme.colors.positive;
     default:
       return theme.colors.textTertiary;
   }
 }
 
-/**
- * The alerts the server has raised.
- *
- * In-app only for now: everything that makes push work — the triggers, the
- * per-alert de-duplication, the preference switches, the device token store — is
- * built and running, and the only missing piece is the call to Expo's push
- * service. So this is the same list a notification tray would show, read from the
- * same rows.
- *
- * Tapping a row marks it read and goes where the alert is about, because an alert
- * you cannot act on is just an interruption.
- */
+function groupNotifications(items: AppNotification[]): {
+  title: string;
+  items: AppNotification[];
+}[] {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+
+  const today: AppNotification[] = [];
+  const yest: AppNotification[] = [];
+  const earlier: AppNotification[] = [];
+
+  for (const n of items) {
+    const itemDate = new Date(n.createdAt);
+    const itemStr = itemDate.toDateString();
+    if (itemStr === todayStr) {
+      today.push(n);
+    } else if (itemStr === yesterdayStr) {
+      yest.push(n);
+    } else {
+      earlier.push(n);
+    }
+  }
+
+  const sections: { title: string; items: AppNotification[] }[] = [];
+  if (today.length > 0) sections.push({ title: 'Today', items: today });
+  if (yest.length > 0) sections.push({ title: 'Yesterday', items: yest });
+  if (earlier.length > 0) sections.push({ title: 'Earlier', items: earlier });
+
+  return sections;
+}
+
 export function NotificationsScreen() {
   const theme = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   const query = useNotifications();
   const markRead = useMarkNotificationRead();
@@ -69,22 +106,59 @@ export function NotificationsScreen() {
 
   const notifications = query.data?.notifications ?? [];
   const unread = query.data?.unread ?? 0;
+  const sections = groupNotifications(notifications);
 
   function open(notification: AppNotification) {
     if (!notification.read) markRead.mutate(notification.id);
 
-    const data = notification.data as { recurringId?: string; transactionId?: string };
+    const data = (notification.data ?? {}) as {
+      budgetId?: string;
+      recurringId?: string;
+      transactionId?: string;
+      personId?: string;
+      obligationId?: string;
+      screen?: string;
+    };
 
-    if (notification.type === 'budget_warning' || notification.type === 'budget_exceeded') {
-      navigation.navigate('Tabs', { screen: 'Budgets' });
-      return;
-    }
-    if (data.transactionId) {
-      navigation.navigate('TransactionDetail', { id: data.transactionId });
-      return;
-    }
-    if (data.recurringId) {
-      navigation.navigate('RecurringForm', { id: data.recurringId });
+    switch (notification.type) {
+      case 'budget_warning':
+      case 'budget_exceeded':
+        navigation.navigate('Tabs', { screen: 'Budgets' });
+        break;
+      case 'recurring_upcoming':
+      case 'recurring_due':
+      case 'recurring_created':
+        if (data.recurringId) {
+          try {
+            navigation.navigate('RecurringForm', { id: data.recurringId });
+          } catch {
+            navigation.navigate('Recurring');
+          }
+        } else {
+          navigation.navigate('Recurring');
+        }
+        break;
+      case 'money_owed_due':
+      case 'repayment_due':
+        if (data.personId) {
+          try {
+            navigation.navigate('PersonDetail', { id: data.personId });
+          } catch {
+            navigation.navigate('People');
+          }
+        } else {
+          navigation.navigate('People');
+        }
+        break;
+      case 'unusual_spending':
+      case 'monthly_summary':
+        navigation.navigate('Tabs', { screen: 'Insights' });
+        break;
+      default:
+        if (data.transactionId) {
+          navigation.navigate('TransactionDetail', { id: data.transactionId });
+        }
+        break;
     }
   }
 
@@ -135,19 +209,26 @@ export function NotificationsScreen() {
           icon: 'checkCircle',
           title: 'Nothing to report',
           description:
-            'Paisa tells you when a budget is close or over, and when a recurring charge is due. Never more than once each.',
+            'Paisa tells you when a budget is close or over, when payments or money owed are due, and gives spending insights. Never more than once each.',
         }}
       >
-        <Card padding={0} radius="xl">
-          <View style={{ paddingHorizontal: theme.spacing.lg }}>
-            {notifications.map((notification, index) => (
-              <Fragment key={notification.id}>
-                {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
-                <NotificationRow notification={notification} onPress={open} />
-              </Fragment>
-            ))}
-          </View>
-        </Card>
+        <View style={{ gap: theme.spacing.xl }}>
+          {sections.map((section) => (
+            <View key={section.title} style={{ gap: theme.spacing.sm }}>
+              <SectionHeader title={section.title} />
+              <Card padding={0} radius="xl">
+                <View style={{ paddingHorizontal: theme.spacing.lg }}>
+                  {section.items.map((notification, index) => (
+                    <Fragment key={notification.id}>
+                      {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
+                      <NotificationRow notification={notification} onPress={open} />
+                    </Fragment>
+                  ))}
+                </View>
+              </Card>
+            </View>
+          ))}
+        </View>
 
         <Button
           label="Clear all"
@@ -196,7 +277,6 @@ function NotificationRow({
           <Text variant="label" numberOfLines={2} style={{ flexShrink: 1 }}>
             {notification.title}
           </Text>
-          {/* A dot rather than a bold row: unread is worth marking, not shouting. */}
           {notification.read ? null : (
             <View
               accessibilityElementsHidden

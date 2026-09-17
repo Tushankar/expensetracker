@@ -9,9 +9,10 @@ import {
   errorMessage,
   useExportTransactions,
   useLogout,
+  useNotificationPreferences,
   useSession,
   useUnreadCount,
-  useUpdateProfile,
+  useUpdateNotificationPreferences,
 } from '@/api';
 import {
   Badge,
@@ -61,17 +62,16 @@ export function SettingsScreen() {
   const user = useAuthStore((state) => state.user);
   const sessionQuery = useSession();
   const logout = useLogout();
-  const updateProfile = useUpdateProfile();
   const unreadQuery = useUnreadCount();
+
+  const prefsQuery = useNotificationPreferences();
+  const updatePrefs = useUpdateNotificationPreferences();
+  const prefs = prefsQuery.data;
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
-  /**
-   * Which switch is mid-flight. The mutation is shared, so without this both
-   * rows grey out whenever either one is saving.
-   */
-  const [pendingToggle, setPendingToggle] = useState<'budget' | 'recurring'>();
+  const [pendingToggle, setPendingToggle] = useState<string>();
 
   const exportTransactions = useExportTransactions();
   const showToast = useUiStore((state) => state.showToast);
@@ -278,30 +278,125 @@ export function SettingsScreen() {
           <SectionHeader title="Notify me about" />
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
-              {/* Switched off at the source: the server checks these before it
-                  writes an alert, so turning one off stops it being raised rather
-                  than hiding it here. */}
               <ToggleRow
                 title="Budgets"
-                subtitle="Once when you get close, once if you go over"
+                subtitle="Warning at 80% and alert when exceeded"
                 icon="target"
-                value={profile?.notificationPrefs?.budgetAlerts ?? true}
-                busy={updateProfile.isPending && pendingToggle === 'budget'}
+                value={prefs?.budgetAlerts ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'budget'}
                 onChange={(budgetAlerts) => {
                   setPendingToggle('budget');
-                  updateProfile.mutate({ notificationPrefs: { budgetAlerts } });
+                  updatePrefs.mutate({ budgetAlerts });
                 }}
               />
               <Divider inset={DIVIDER_INSET} />
               <ToggleRow
                 title="Recurring"
-                subtitle="Before a charge is due, and when it is recorded"
+                subtitle="Reminders 2 days before and on due date"
                 icon="repeat"
-                value={profile?.notificationPrefs?.recurringAlerts ?? true}
-                busy={updateProfile.isPending && pendingToggle === 'recurring'}
+                value={prefs?.recurringAlerts ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'recurring'}
                 onChange={(recurringAlerts) => {
                   setPendingToggle('recurring');
-                  updateProfile.mutate({ notificationPrefs: { recurringAlerts } });
+                  updatePrefs.mutate({ recurringAlerts });
+                }}
+              />
+              <Divider inset={DIVIDER_INSET} />
+              <ToggleRow
+                title="People & Money Owed"
+                subtitle="Reminders when loans or repayments are due"
+                icon="user"
+                value={prefs?.peopleAlerts ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'people'}
+                onChange={(peopleAlerts) => {
+                  setPendingToggle('people');
+                  updatePrefs.mutate({ peopleAlerts });
+                }}
+              />
+              <Divider inset={DIVIDER_INSET} />
+              <ToggleRow
+                title="Spending Insights"
+                subtitle="Alerts when category spending spikes"
+                icon="trendingUp"
+                value={prefs?.spendingAlerts ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'spending'}
+                onChange={(spendingAlerts) => {
+                  setPendingToggle('spending');
+                  updatePrefs.mutate({ spendingAlerts });
+                }}
+              />
+              <Divider inset={DIVIDER_INSET} />
+              <ToggleRow
+                title="Monthly Summary"
+                subtitle="Overview of previous month's spending"
+                icon="pieChart"
+                value={prefs?.monthlySummaryAlerts ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'summary'}
+                onChange={(monthlySummaryAlerts) => {
+                  setPendingToggle('summary');
+                  updatePrefs.mutate({ monthlySummaryAlerts });
+                }}
+              />
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xxxl }}>
+          <SectionHeader title="Notification privacy" />
+          <Card padding={0} radius="xl">
+            <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
+              <Text variant="bodySm" tone="secondary">
+                Control how much financial information is shown in notification previews on the lock screen.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                {(['private', 'basic', 'detailed'] as const).map((mode) => {
+                  const selected = (prefs?.previewMode ?? 'private') === mode;
+                  const label = mode === 'private' ? 'Private' : mode === 'basic' ? 'Basic' : 'Detailed';
+                  return (
+                    <Pressable
+                      key={mode}
+                      onPress={() => {
+                        tapFeedback();
+                        updatePrefs.mutate({ previewMode: mode });
+                      }}
+                      style={{
+                        flex: 1,
+                        paddingVertical: theme.spacing.sm,
+                        borderRadius: theme.radius.md,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: selected ? theme.colors.brand : theme.colors.surfaceMuted,
+                      }}
+                    >
+                      <Text
+                        variant="label"
+                        style={{
+                          color: selected ? theme.colors.textOnAccent : theme.colors.textSecondary,
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xxxl }}>
+          <SectionHeader title="Quiet hours" />
+          <Card padding={0} radius="xl">
+            <View style={{ paddingHorizontal: theme.spacing.lg }}>
+              <ToggleRow
+                title="Quiet Hours (10:00 PM – 8:00 AM)"
+                subtitle="Mutes push notifications during sleep hours"
+                icon="moon"
+                value={prefs?.quietHours?.enabled ?? true}
+                busy={updatePrefs.isPending && pendingToggle === 'quiet'}
+                onChange={(enabled) => {
+                  setPendingToggle('quiet');
+                  updatePrefs.mutate({ quietHours: { enabled } });
                 }}
               />
             </View>

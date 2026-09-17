@@ -42,6 +42,7 @@ import type {
   UpdateBudgetInput,
   UpdateRecurringInput,
   UpdateTransactionInput,
+  UpdateNotificationPreferences,
 } from './types';
 
 /**
@@ -511,6 +512,36 @@ export function useClearNotifications() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => notificationApi.clearAll(),
+    onSuccess: () => invalidateNotifications(client),
+  });
+}
+
+export function useNotificationPreferences() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.notificationPreferences,
+    enabled: status === 'signedIn',
+    queryFn: () => notificationApi.getPreferences(),
+  });
+}
+
+export function useUpdateNotificationPreferences() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: UpdateNotificationPreferences) => notificationApi.updatePreferences(patch),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.notificationPreferences, data);
+      client.invalidateQueries({ queryKey: queryKeys.notificationPreferences });
+      client.invalidateQueries({ queryKey: queryKeys.session });
+    },
+  });
+}
+
+export function useRunAlerts() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => notificationApi.runAlerts(),
     onSuccess: () => invalidateNotifications(client),
   });
 }

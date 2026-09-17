@@ -386,16 +386,47 @@ export type NotificationType =
   | 'budget_warning'
   | 'budget_exceeded'
   | 'recurring_upcoming'
-  | 'recurring_created';
+  | 'recurring_due'
+  | 'recurring_created'
+  | 'money_owed_due'
+  | 'repayment_due'
+  | 'unusual_spending'
+  | 'monthly_summary'
+  | 'system';
+
+export type NotificationPreviewMode = 'detailed' | 'basic' | 'private';
+
+export type QuietHours = {
+  enabled: boolean;
+  start: string;
+  end: string;
+};
+
+export type NotificationPreferences = {
+  budgetAlerts: boolean;
+  recurringAlerts: boolean;
+  peopleAlerts: boolean;
+  spendingAlerts: boolean;
+  monthlySummaryAlerts: boolean;
+  previewMode: NotificationPreviewMode;
+  quietHours: QuietHours;
+};
+
+export type UpdateNotificationPreferences = Partial<Omit<NotificationPreferences, 'quietHours'>> & {
+  quietHours?: Partial<QuietHours>;
+};
 
 export type AppNotification = {
   id: string;
   type: NotificationType;
   title: string;
   body: string;
-  /** `{ budgetId?, categoryId?, recurringId?, transactionId?, month? }` */
+  /** `{ budgetId?, categoryId?, recurringId?, transactionId?, personId?, obligationId?, month?, screen? }` */
   data: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   read: boolean;
+  delivered?: boolean;
+  scheduledFor?: string;
   createdAt: string;
 };
 

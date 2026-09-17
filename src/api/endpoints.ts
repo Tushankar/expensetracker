@@ -8,6 +8,8 @@ import type {
   AnalyticsBucket,
   AnalyticsOverview,
   AppNotification,
+  NotificationPreferences,
+  UpdateNotificationPreferences,
   CategorySuggestion,
   DeletionSummary,
   FilteredSummary,
@@ -325,7 +327,7 @@ export const notificationApi = {
 
   markRead(id: string) {
     return requestData<{ notification: AppNotification }>(`/notifications/${id}/read`, {
-      method: 'POST',
+      method: 'PATCH',
     }).then((data) => data.notification);
   },
 
@@ -337,10 +339,36 @@ export const notificationApi = {
     return requestData<{ deleted: number }>('/notifications', { method: 'DELETE' });
   },
 
-  registerDevice(token: string) {
-    return requestData<{ deleted: boolean }>('/notifications/device', {
+  getPreferences() {
+    return requestData<{ preferences: NotificationPreferences }>('/notification-preferences').then(
+      (data) => data.preferences,
+    );
+  },
+
+  updatePreferences(patch: UpdateNotificationPreferences) {
+    return requestData<{ preferences: NotificationPreferences }>('/notification-preferences', {
+      method: 'PATCH',
+      body: patch,
+    }).then((data) => data.preferences);
+  },
+
+  registerDevice(device: { token: string; platform?: string; deviceId?: string }) {
+    return requestData<{ registered: boolean; id: string }>('/devices/register', {
       method: 'POST',
+      body: device,
+    });
+  },
+
+  unregisterDevice(token: string) {
+    return requestData<{ deleted: boolean }>('/notifications/device', {
+      method: 'DELETE',
       body: { token },
+    });
+  },
+
+  runAlerts() {
+    return requestData<{ result: any }>('/notifications/run-alerts', {
+      method: 'POST',
     });
   },
 };
