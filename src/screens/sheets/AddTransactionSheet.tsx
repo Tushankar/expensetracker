@@ -142,8 +142,18 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
   const [date, setDate] = useState(() => (editing ? new Date(editing.date) : new Date()));
   const [merchant, setMerchant] = useState(editing?.merchant ?? '');
   const [note, setNote] = useState(editing?.description ?? '');
+  const isDateToday = useMemo(() => {
+    if (!editing) return true;
+    return new Date(editing.date).toDateString() === new Date().toDateString();
+  }, [editing]);
+
   const [showDetails, setShowDetails] = useState(
-    Boolean(editing?.merchant || editing?.description),
+    Boolean(
+      editing?.merchant ||
+        editing?.description ||
+        (editing && !isDateToday) ||
+        (editing && editing.paymentMethod && editing.paymentMethod !== 'upi'),
+    ),
   );
   const [error, setError] = useState<string | undefined>();
 
@@ -810,7 +820,51 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
               </>
             )}
           </View>
+        </View>
+      )}
 
+      {/* Primary flow is fast: Amount -> Category -> Account -> Save.
+          Optional fields (date, payment method, merchant, note, receipt) are cleanly tucked inside "More details". */}
+      {showDetails ? (
+        <View
+          style={{
+            marginTop: theme.spacing.sm,
+            gap: theme.spacing.md,
+            padding: theme.spacing.md,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.surfaceMuted,
+            borderWidth: theme.layout.hairline,
+            borderColor: theme.colors.border,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Text variant="overline" tone="tertiary">
+              More details
+            </Text>
+            <Pressable
+              onPress={() => {
+                tapFeedback();
+                setShowDetails(false);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Hide extra details"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            >
+              <Text variant="caption" tone="tertiary">
+                Hide
+              </Text>
+              <Icon name="chevronUp" size={13} color={theme.colors.textTertiary} />
+            </Pressable>
+          </View>
+
+          {/* Date & Payment Method */}
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
             <Selector
               label="Date"
@@ -825,47 +879,48 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
               onPress={() => setStep('method')}
             />
           </View>
-        </View>
-      )}
 
-      {/* Everything below here is optional, and stays folded away until asked for.
-          A note field in the fast path is a field most people scroll past. */}
-      {showDetails ? (
-        <View style={{ marginTop: theme.spacing.lg, gap: theme.spacing.md }}>
-          <Input
-            label={type === 'income' ? 'Source' : 'Paid to'}
-            placeholder={type === 'income' ? 'Salary, freelance…' : 'Swiggy, Indian Oil…'}
-            value={merchant}
-            onChangeText={setMerchant}
-            onBlur={requestSuggestion}
-            returnKeyType="next"
-            maxLength={120}
-          />
+          {/* Merchant (Paid to / Source) */}
+          {type !== 'transfer' ? (
+            <>
+              <Input
+                label={type === 'income' ? 'Source' : 'Paid to'}
+                placeholder={type === 'income' ? 'Salary, freelance…' : 'Swiggy, Indian Oil…'}
+                value={merchant}
+                onChangeText={setMerchant}
+                onBlur={requestSuggestion}
+                returnKeyType="next"
+                maxLength={120}
+              />
 
-          {suggestion.isPending ? (
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
-              accessibilityLiveRegion="polite"
-            >
-              <Spinner />
-              <Text variant="caption" tone="tertiary">
-                Working out a category…
-              </Text>
-            </View>
-          ) : showProposal && proposed ? (
-            <CategoryProposal
-              category={proposed}
-              confidence={suggestion.data?.confidence ?? 'low'}
-              source={suggestion.data?.source ?? 'none'}
-              reason={suggestion.data?.reason ?? ''}
-              onUse={() => {
-                tapFeedback();
-                setCategoryPick(proposed.id);
-                suggestion.reset();
-              }}
-              onDismiss={() => suggestion.reset()}
-            />
+              {suggestion.isPending ? (
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
+                  accessibilityLiveRegion="polite"
+                >
+                  <Spinner />
+                  <Text variant="caption" tone="tertiary">
+                    Working out a category…
+                  </Text>
+                </View>
+              ) : showProposal && proposed ? (
+                <CategoryProposal
+                  category={proposed}
+                  confidence={suggestion.data?.confidence ?? 'low'}
+                  source={suggestion.data?.source ?? 'none'}
+                  reason={suggestion.data?.reason ?? ''}
+                  onUse={() => {
+                    tapFeedback();
+                    setCategoryPick(proposed.id);
+                    suggestion.reset();
+                  }}
+                  onDismiss={() => suggestion.reset()}
+                />
+              ) : null}
+            </>
           ) : null}
+
+          {/* Note */}
           <Input
             label="Note"
             placeholder="Optional"
@@ -874,6 +929,59 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             returnKeyType="done"
             maxLength={500}
           />
+
+          {/* Receipt attachment within details */}
+          {receipt ? (
+            <Pressable
+              onPress={() => {
+                tapFeedback();
+                setStep('receipt');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Receipt attached. Opens the bill."
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.spacing.sm,
+                paddingHorizontal: theme.spacing.md,
+                paddingVertical: theme.spacing.sm,
+                borderRadius: theme.radius.sm,
+                backgroundColor: pressed ? theme.colors.surfaceStrong : theme.colors.surface,
+              })}
+            >
+              <Icon name="scan" size={15} color={theme.colors.brandText} />
+              <Text variant="caption" tone="secondary" style={{ flex: 1 }} numberOfLines={1}>
+                Receipt attached
+              </Text>
+              <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
+            </Pressable>
+          ) : receiptStatus.data?.storage ? (
+            <Pressable
+              onPress={() => {
+                tapFeedback();
+                setStep('receipt');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Attach bill or receipt"
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.spacing.sm,
+                minHeight: 40,
+                paddingHorizontal: theme.spacing.md,
+                borderRadius: theme.radius.sm,
+                backgroundColor: pressed ? theme.colors.surfaceStrong : theme.colors.surface,
+                borderWidth: theme.layout.hairline,
+                borderColor: theme.colors.border,
+              })}
+            >
+              <Icon name="camera" size={15} color={theme.colors.textSecondary} />
+              <Text variant="labelSm" tone="secondary">
+                Attach bill or receipt
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <Pressable
@@ -882,27 +990,44 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             setShowDetails(true);
           }}
           accessibilityRole="button"
-          accessibilityLabel="Add a merchant and note"
-          style={{
+          accessibilityLabel="More details: date, payment method, merchant, notes, and receipts"
+          style={({ pressed }) => ({
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            marginTop: theme.spacing.md,
+            justifyContent: 'space-between',
+            gap: theme.spacing.sm,
+            marginTop: theme.spacing.sm,
+            paddingHorizontal: theme.spacing.md,
             minHeight: 44,
-          }}
+            borderRadius: theme.radius.md,
+            backgroundColor: pressed ? theme.colors.surfaceStrong : theme.colors.surfaceMuted,
+            borderWidth: theme.layout.hairline,
+            borderColor: theme.colors.border,
+          })}
         >
-          <Icon name="plus" size={14} color={theme.colors.textTertiary} />
-          <Text variant="labelSm" tone="tertiary">
-            Add merchant or note
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="plus" size={14} color={theme.colors.textTertiary} />
+            <Text variant="labelSm" tone="tertiary">
+              More details
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+            <Text variant="caption" tone="tertiary" numberOfLines={1}>
+              {[
+                formatDayLabel(date.toISOString()),
+                PAYMENT_METHOD_LABEL[method],
+                merchant.trim() || undefined,
+              ]
+                .filter(Boolean)
+                .join('  ·  ')}
+            </Text>
+            <Icon name="chevronDown" size={13} color={theme.colors.textTertiary} />
+          </View>
         </Pressable>
       )}
 
-      {/* A receipt attached but not yet saved. Shown on the form rather than
-          left behind on a panel nobody returns to, because an image the user
-          cannot see is an image they will assume was lost. */}
-      {receipt ? (
+      {/* A receipt attached while details are hidden is still shown above the keypad */}
+      {receipt && !showDetails ? (
         <Pressable
           onPress={() => {
             tapFeedback();
@@ -914,7 +1039,7 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             flexDirection: 'row',
             alignItems: 'center',
             gap: theme.spacing.sm,
-            marginTop: theme.spacing.md,
+            marginTop: theme.spacing.sm,
             paddingHorizontal: theme.spacing.md,
             paddingVertical: theme.spacing.sm,
             borderRadius: theme.radius.sm,
