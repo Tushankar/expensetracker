@@ -88,8 +88,8 @@ export function GreetingHeader({
           // subscription renews tomorrow" deserve different urgency, and the
           // number is the cheapest way to say which this is.
           <View
-            pointerEvents="none"
             style={{
+              pointerEvents: 'none',
               position: 'absolute',
               top: 2,
               right: 0,

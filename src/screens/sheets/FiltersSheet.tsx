@@ -141,9 +141,12 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
       </View>
 
       <FilterSection title="Account">
+        {/* Carries a tile like every row under it. Without one its label sits
+            48dp to the left of the rest and the group reads as two lists. */}
         <OptionRow
           label="Any account"
           selected={!draft.accountId}
+          leading={<IconTile name="wallet" color={theme.colors.textTertiary} size="sm" />}
           onPress={() => setDraft((current) => ({ ...current, accountId: undefined }))}
         />
         {accounts.map((account) => (
@@ -192,6 +195,7 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
         <OptionRow
           label="Any category"
           selected={!draft.categoryId}
+          leading={<IconTile name="list" color={theme.colors.textTertiary} size="sm" />}
           onPress={() => setDraft((current) => ({ ...current, categoryId: undefined }))}
         />
         {selectedCategory ? (

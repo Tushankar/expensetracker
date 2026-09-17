@@ -28,6 +28,7 @@ import {
   PageHeader,
   PillButton,
   Screen,
+  Skeleton,
   SkeletonRow,
   Text,
 } from '@/components/ui';
@@ -229,10 +230,17 @@ export function TransactionsScreen() {
     <View>
       <PageHeader
         title="Activity"
+        // A count, once there is one. The standing line is for a genuinely
+        // empty ledger only — showing "Track your spending, in one place" over
+        // a search that found nothing reads as if the app forgot what it was
+        // doing, and it is the one subtitle long enough to wrap into the
+        // buttons beside it.
         subtitle={
           list.total > 0
             ? `${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`
-            : 'Track your spending, in one place'
+            : filtered
+              ? 'No matches'
+              : 'Track your spending, in one place'
         }
         action={
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
@@ -277,8 +285,8 @@ export function TransactionsScreen() {
               />
               {activeFilterCount > 0 ? (
                 <View
-                  pointerEvents="none"
                   style={{
+                    pointerEvents: 'none',
                     position: 'absolute',
                     top: 6,
                     right: 6,
@@ -311,37 +319,25 @@ export function TransactionsScreen() {
         />
       ) : null}
 
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.spacing.sm,
-          marginBottom: theme.spacing.lg,
-          // In calendar mode the day picker *is* the period control, so the month
-          // pill beside it would be two answers to one question.
-          display: view === 'calendar' ? 'none' : 'flex',
-        }}
-      >
+      {/* Type chips get the row to themselves. The period control lives on the
+          summary card below, where the figures it changes are. */}
+      {view === 'calendar' ? null : (
         <ChipRow
           options={KINDS}
           value={kind}
           onChange={setKind}
           size="sm"
           accessibilityLabel="Filter by type"
-          style={{ flex: 1, minWidth: 0 }}
+          style={{ marginBottom: theme.spacing.lg }}
         />
-        <PillButton
-          label={range.label}
-          leftIcon="calendar"
-          rightIcon="chevronDown"
-          accessibilityLabel={`Period, ${range.label}`}
-          accessibilityHint="Changes the period shown"
-          onPress={openRangeSheet}
-        />
-      </View>
+      )}
 
+      {/* The day headings below are sticky and carry their own top padding, so
+          this block stops short of a full gap — `xxl` here stacked on the
+          heading's `xl` left 44dp of empty canvas between the card and the
+          first row. */}
       {view === 'calendar' ? (
-        <View style={{ marginBottom: theme.spacing.xxl }}>
+        <View style={{ marginBottom: theme.spacing.xs }}>
           <TransactionCalendar
             days={dailyQuery.data ?? []}
             selected={day}
@@ -352,14 +348,41 @@ export function TransactionsScreen() {
           />
         </View>
       ) : debounced ? (
-        <View style={{ marginBottom: theme.spacing.lg }}>
+        <View style={{ marginBottom: theme.spacing.xs }}>
           <Badge label={`Searching all time for "${debounced}"`} tone="brand" />
         </View>
       ) : periodSummary ? (
-        <View style={{ marginBottom: theme.spacing.xxl }}>
-          <ActivitySummaryCard summary={periodSummary} />
+        <View style={{ marginBottom: theme.spacing.xs }}>
+          <ActivitySummaryCard summary={periodSummary} onPeriodPress={openRangeSheet} />
         </View>
-      ) : null}
+      ) : summaryQuery.isLoading ? (
+        // Held open while the period totals load. Without it the card — and the
+        // period control now on it — pops in after the rows underneath have
+        // already settled, and the whole list jumps down.
+        //
+        // Only while it is *loading*: if the totals fail the list itself is
+        // still perfectly usable, and a skeleton that never resolves is a worse
+        // answer than no card at all.
+        <View style={{ marginBottom: theme.spacing.xs }}>
+          <Skeleton height={190} radius={theme.radius.xl} />
+        </View>
+      ) : (
+        // The totals failed, but the period control is the only way to change
+        // what the list below is showing — it cannot disappear with the card it
+        // normally rides on.
+        <View
+          style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: theme.spacing.xs }}
+        >
+          <PillButton
+            label={range.label}
+            leftIcon="calendar"
+            rightIcon="chevronDown"
+            accessibilityLabel={`Period, ${range.label}`}
+            accessibilityHint="Changes the period shown"
+            onPress={openRangeSheet}
+          />
+        </View>
+      )}
     </View>
   );
 
@@ -409,7 +432,10 @@ export function TransactionsScreen() {
               error={list.error}
               isEmpty
               onRetry={refresh}
-              fill={false}
+              // Fills the room the header leaves rather than sitting under it
+              // with a screen of dead canvas below — `flexGrow` on the content
+              // container is what gives it that space to take.
+              fill
               loadingFallback={
                 <View>
                   {Array.from({ length: 6 }, (_, index) => (
@@ -422,7 +448,9 @@ export function TransactionsScreen() {
                   ? {
                       icon: 'search',
                       title: 'Nothing matches',
-                      description: 'No transactions fit these filters. Try widening them.',
+                      description: debounced
+                        ? `No transaction mentions "${debounced}". Check the spelling, or clear the search.`
+                        : 'No transactions fit these filters. Try widening them.',
                       action: {
                         label: 'Clear all',
                         onPress: clearEverything,

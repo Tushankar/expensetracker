@@ -18,6 +18,14 @@ export type ListRowProps = {
   trailing?: ReactNode;
   showChevron?: boolean;
   onPress?: () => void;
+  /**
+   * The row's action is already running. It stops firing twice and dims to say
+   * so, which is what a row whose work takes a visible moment — an export, a
+   * sign-out — needs in place of a button's spinner.
+   */
+  busy?: boolean;
+  /** Announces the row as a choice in a set rather than as a plain button. */
+  selected?: boolean;
   accessibilityHint?: string;
   style?: ViewStyle;
   testID?: string;
@@ -36,6 +44,8 @@ export function ListRow({
   trailing,
   showChevron = false,
   onPress,
+  busy = false,
+  selected,
   accessibilityHint,
   style,
   testID,
@@ -52,6 +62,7 @@ export function ListRow({
           gap: theme.spacing.md,
           minHeight: 64,
           paddingVertical: theme.spacing.md,
+          opacity: busy ? 0.6 : 1,
         },
         style,
       ]}
@@ -89,14 +100,17 @@ export function ListRow({
     <Pressable
       testID={testID}
       onPress={() => {
+        if (busy) return;
         tapFeedback();
         onPress();
       }}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
+      disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={buildLabel(title, subtitle)}
       accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: busy, busy, selected }}
     >
       <Animated.View style={animatedStyle}>{body}</Animated.View>
     </Pressable>

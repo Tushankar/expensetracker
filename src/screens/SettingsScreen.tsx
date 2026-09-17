@@ -31,9 +31,15 @@ import { EditProfileSheet } from '@/screens/sheets/EditProfileSheet';
 import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { useAccentStore } from '@/store/themeStore';
-import { accentList, colorsByAccent, useTheme } from '@/theme';
+import { accentList, colorsByAccent, spacing, useTheme } from '@/theme';
 import { shareTextFile } from '@/services/exportFile';
 import { errorFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
+
+/**
+ * Lines a divider up with the row title rather than its icon tile: the tile is
+ * 44dp wide and `ListRow` puts `spacing.md` between it and the text.
+ */
+const DIVIDER_INSET = 44 + spacing.md;
 
 /**
  * Settings: who you are, how the app looks, and the way out.
@@ -60,6 +66,11 @@ export function SettingsScreen() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  /**
+   * Which switch is mid-flight. The mutation is shared, so without this both
+   * rows grey out whenever either one is saving.
+   */
+  const [pendingToggle, setPendingToggle] = useState<'budget' | 'recurring'>();
 
   const exportTransactions = useExportTransactions();
   const showToast = useUiStore((state) => state.showToast);
@@ -209,7 +220,7 @@ export function SettingsScreen() {
                 showChevron
                 onPress={() => openSheet(setProfileOpen)}
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ListRow
                 title="Change password"
                 subtitle="Signs out every other device"
@@ -232,7 +243,7 @@ export function SettingsScreen() {
                 showChevron
                 onPress={() => navigation.navigate('Accounts')}
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ListRow
                 title="Recurring"
                 subtitle="Rent, subscriptions, EMIs and salary"
@@ -240,7 +251,7 @@ export function SettingsScreen() {
                 showChevron
                 onPress={() => navigation.navigate('Recurring')}
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ListRow
                 title="Alerts"
                 subtitle="Budget and recurring notifications"
@@ -269,21 +280,23 @@ export function SettingsScreen() {
                 subtitle="Once when you get close, once if you go over"
                 icon="target"
                 value={profile?.notificationPrefs?.budgetAlerts ?? true}
-                busy={updateProfile.isPending}
-                onChange={(budgetAlerts) =>
-                  updateProfile.mutate({ notificationPrefs: { budgetAlerts } })
-                }
+                busy={updateProfile.isPending && pendingToggle === 'budget'}
+                onChange={(budgetAlerts) => {
+                  setPendingToggle('budget');
+                  updateProfile.mutate({ notificationPrefs: { budgetAlerts } });
+                }}
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ToggleRow
                 title="Recurring"
                 subtitle="Before a charge is due, and when it is recorded"
                 icon="repeat"
                 value={profile?.notificationPrefs?.recurringAlerts ?? true}
-                busy={updateProfile.isPending}
-                onChange={(recurringAlerts) =>
-                  updateProfile.mutate({ notificationPrefs: { recurringAlerts } })
-                }
+                busy={updateProfile.isPending && pendingToggle === 'recurring'}
+                onChange={(recurringAlerts) => {
+                  setPendingToggle('recurring');
+                  updateProfile.mutate({ notificationPrefs: { recurringAlerts } });
+                }}
               />
             </View>
           </Card>
@@ -298,7 +311,7 @@ export function SettingsScreen() {
                 const preview = colorsByAccent[option.id];
                 return (
                   <Fragment key={option.id}>
-                    {index > 0 ? <Divider inset={44 + theme.spacing.md} /> : null}
+                    {index > 0 ? <Divider inset={DIVIDER_INSET} /> : null}
                     <ListRow
                       title={option.label}
                       subtitle={selected ? 'Active' : 'Tap to apply'}
@@ -338,6 +351,7 @@ export function SettingsScreen() {
                         ) : null
                       }
                       onPress={() => setAccent(option.id)}
+                      selected={selected}
                       accessibilityHint={selected ? 'Currently selected' : 'Applies this accent'}
                     />
                   </Fragment>
@@ -357,6 +371,7 @@ export function SettingsScreen() {
                 leading={<IconTile name="package" color={theme.colors.brandText} />}
                 onPress={() => void exportEverything()}
                 accessibilityHint="Creates a CSV file and opens the share sheet"
+                busy={exportTransactions.isPending}
                 trailing={
                   exportTransactions.isPending ? (
                     <Text variant="caption" tone="tertiary">
@@ -365,7 +380,7 @@ export function SettingsScreen() {
                   ) : null
                 }
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ListRow
                 title="Close account"
                 subtitle="Deletes everything, permanently"
@@ -373,7 +388,7 @@ export function SettingsScreen() {
                 showChevron
                 onPress={() => {
                   tapFeedback();
-                  setCloseOpen(true);
+                  openSheet(setCloseOpen);
                 }}
                 accessibilityHint="Opens the account deletion confirmation"
               />
@@ -393,12 +408,13 @@ export function SettingsScreen() {
                 onPress={() => navigation.navigate('DesignSystem')}
                 accessibilityHint="Opens the component gallery"
               />
-              <Divider inset={44 + theme.spacing.md} />
+              <Divider inset={DIVIDER_INSET} />
               <ListRow
                 title="Sign out"
                 subtitle="Ends this session on this device"
-                leading={<IconTile name="arrowRight" color={theme.colors.negative} />}
+                leading={<IconTile name="arrowRight" color={theme.colors.textTertiary} />}
                 onPress={confirmSignOut}
+                busy={logout.isPending}
                 trailing={
                   logout.isPending ? (
                     <Text variant="caption" tone="tertiary">
@@ -437,7 +453,11 @@ export function SettingsScreen() {
         visible={profileOpen}
         onClose={() => setProfileOpen(false)}
       />
-      <CloseAccountSheet visible={closeOpen} onClose={() => setCloseOpen(false)} />
+      <CloseAccountSheet
+        key={`close-${sheetSession}`}
+        visible={closeOpen}
+        onClose={() => setCloseOpen(false)}
+      />
 
       <ChangePasswordSheet
         key={`password-${sheetSession}`}

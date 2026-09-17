@@ -1,13 +1,15 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { View } from 'react-native';
 
-import { Icon, Text } from '@/components/ui';
+import { Icon, PillButton, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
 import { formatINR, percentChange } from '@/utils/currency';
 
 export type ActivitySummaryCardProps = {
   summary: PeriodSummary;
+  /** Opens the period picker. Omit it and the label is plain text. */
+  onPeriodPress?: () => void;
 };
 
 /**
@@ -17,8 +19,14 @@ export type ActivitySummaryCardProps = {
  * Three figures rather than a chart, because all three are exact — the server
  * aggregates over the whole period, while a chart drawn from the loaded pages
  * would be a picture of how far the user has scrolled.
+ *
+ * The period pill lives here rather than in the toolbar above, for the same
+ * reason it lives on the balance card on Home: the control belongs to the
+ * figures it changes. Keeping it in the header meant a 158dp pill crushing the
+ * type chips beside it into 192dp — enough for "All", "Expenses" and half of
+ * "Income" — while the card underneath printed the very same date range again.
  */
-export function ActivitySummaryCard({ summary }: ActivitySummaryCardProps) {
+export function ActivitySummaryCard({ summary, onPeriodPress }: ActivitySummaryCardProps) {
   const theme = useTheme();
 
   const delta = percentChange(summary.spent, summary.previousSpent);
@@ -40,12 +48,30 @@ export function ActivitySummaryCard({ summary }: ActivitySummaryCardProps) {
       ]}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <Text variant="caption" color={theme.colors.heroTextMuted} style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          variant="labelSm"
+          color={theme.colors.heroTextMuted}
+          style={{ flex: 1, minWidth: 0 }}
+          numberOfLines={1}
+        >
           Total spent
         </Text>
-        <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
-          {summary.label}
-        </Text>
+        {onPeriodPress ? (
+          <PillButton
+            label={summary.label}
+            leftIcon="calendar"
+            rightIcon="chevronDown"
+            onHero
+            accessibilityLabel={`Period, ${summary.label}`}
+            accessibilityHint="Changes the period shown"
+            onPress={onPeriodPress}
+            style={{ flexShrink: 1 }}
+          />
+        ) : (
+          <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+            {summary.label}
+          </Text>
+        )}
       </View>
 
       <Text

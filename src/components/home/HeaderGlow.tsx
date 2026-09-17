@@ -24,7 +24,6 @@ export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
       height={height}
       // Anchored at the content top: a ScrollView clips anything above it.
       style={styles.glow}
-      pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
@@ -62,5 +61,7 @@ export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
 }
 
 const styles = StyleSheet.create({
-  glow: { position: 'absolute', top: 0, left: 0 },
+  glow: { position: 'absolute', top: 0, left: 0,
+    pointerEvents: 'none',
+  },
 });

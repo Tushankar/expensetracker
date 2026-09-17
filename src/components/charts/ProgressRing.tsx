@@ -103,7 +103,7 @@ export function ProgressRing({
       </Svg>
 
       {children ? (
-        <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, styles.center, styles.noTouch]}>
           {children}
         </View>
       ) : null}
@@ -112,5 +112,6 @@ export function ProgressRing({
 }
 
 const styles = StyleSheet.create({
+  noTouch: { pointerEvents: 'none' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

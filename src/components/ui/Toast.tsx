@@ -80,7 +80,6 @@ export function Toast({ message, detail, tone = 'success', duration = 2600, onDi
 
   return (
     <View
-      pointerEvents="box-none"
       style={[styles.wrap, { paddingBottom: insets.bottom + theme.spacing.xxxl }]}
     >
       <Animated.View
@@ -130,5 +129,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 16,
+    // The scrim is full-screen; only the toast itself takes touches.
+    pointerEvents: 'box-none',
   },
 });

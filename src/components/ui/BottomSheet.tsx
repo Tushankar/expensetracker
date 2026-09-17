@@ -172,20 +172,25 @@ export function BottomSheet({
         <Animated.View
           style={[StyleSheet.absoluteFill, backdropStyle, { backgroundColor: theme.colors.overlay }]}
         >
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={dismissOnBackdropPress ? onClose : undefined}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            accessibilityHint="Dismisses the sheet"
-          />
+          {/* Only a control when it actually does something. Announcing a
+              "Close" button that a destructive confirmation deliberately
+              ignores sends a screen-reader user somewhere that does not
+              exist. */}
+          {dismissOnBackdropPress ? (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              accessibilityHint="Dismisses the sheet"
+            />
+          ) : null}
         </Animated.View>
 
         <KeyboardAvoidingView
           // Android resizes the modal window itself; adding padding would double up.
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardWrap}
-          pointerEvents="box-none"
         >
           <Animated.View
             accessibilityViewIsModal
@@ -248,10 +253,18 @@ export function BottomSheet({
 
             <ScrollView
               style={styles.scroll}
-              contentContainerStyle={{ paddingHorizontal: theme.spacing.xl }}
+              contentContainerStyle={{
+                paddingHorizontal: theme.spacing.xl,
+                // The footer is pinned over this, so the last field needs room
+                // to clear it rather than ending flush against the button.
+                paddingBottom: footer ? theme.spacing.sm : 0,
+              }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               bounces={false}
+              // iOS otherwise leaves the focused field under the keyboard when
+              // the sheet is tall enough to scroll.
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             >
               {children}
             </ScrollView>
@@ -275,7 +288,7 @@ export function BottomSheet({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  keyboardWrap: { flex: 1, justifyContent: 'flex-end' },
+  keyboardWrap: { flex: 1, justifyContent: 'flex-end', pointerEvents: 'box-none' },
   sheet: { width: '100%', overflow: 'hidden' },
   handleRow: { alignItems: 'center', paddingTop: 10, paddingBottom: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },

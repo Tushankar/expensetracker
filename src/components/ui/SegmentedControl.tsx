@@ -85,11 +85,11 @@ export function SegmentedControl<T extends string>({
     >
       {segmentWidth > 0 ? (
         <Animated.View
-          pointerEvents="none"
           style={[
             thumbStyle,
             theme.shadows.sm,
             {
+              pointerEvents: 'none',
               position: 'absolute',
               top: TRACK_PADDING,
               left: TRACK_PADDING,

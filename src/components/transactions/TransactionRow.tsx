@@ -35,8 +35,17 @@ export type TransactionRowProps = {
 /**
  * Below this, a labelled category chip and the timestamp cannot both fit, and the
  * timestamp is the one worth keeping — the chip still carries its colour and glyph.
+ *
+ * Measured rather than guessed: on a 390dp screen a labelled chip leaves the
+ * merchant column 108dp, which truncates "Credit Card  ·  9:05 am" to
+ * "Credit Card  ·  9:0…". Icon-only returns ~38dp of that to the name and the
+ * time, which are the two things the row exists to say. The threshold clears
+ * every current phone — a labelled chip is for tablets and the web build.
  */
-const CHIP_LABEL_MIN_WIDTH = 380;
+const CHIP_LABEL_MIN_WIDTH = 430;
+
+/** Holds the amount column steady. Fits a seven-figure rupee total signed. */
+const AMOUNT_COLUMN_WIDTH = 86;
 
 /**
  * One transaction row.
@@ -86,7 +95,12 @@ export const TransactionRow = memo(function TransactionRow({
       ? `${method}  ·  ${time}`
       : [category?.name, method, time].filter(Boolean).join('  ·  ');
 
-  const label = `${title}, ${amount}, ${isTransfer ? 'transfer' : (category?.name ?? '')}, ${meta}`;
+  // Joined from the parts that exist. Interpolating a missing category straight
+  // into the template leaves ", ," in the middle, which a screen reader reads as
+  // a pause into nothing.
+  const label = [title, amount, isTransfer ? 'transfer' : category?.name, meta]
+    .filter(Boolean)
+    .join(', ');
 
   const content = (
     <View
@@ -127,16 +141,26 @@ export const TransactionRow = memo(function TransactionRow({
         />
       ) : null}
 
-      <Text
-        variant="amountSm"
-        tone={isIncome ? 'positive' : isTransfer ? 'secondary' : 'primary'}
-        numberOfLines={1}
-        maxFontSizeMultiplier={1.3}
-      >
-        {amount}
-      </Text>
+      {/* The amount and its disclosure chevron read as one right-hand unit, so
+          they sit closer to each other than to the category chip. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+        <Text
+          variant="amountSm"
+          tone={isIncome ? 'positive' : isTransfer ? 'secondary' : 'primary'}
+          numberOfLines={1}
+          align="right"
+          maxFontSizeMultiplier={1.3}
+          // A ledger column, so the figures line up on their last digit and the
+          // category tiles beside them stop wandering left and right with the
+          // width of the number. Wide enough for "−₹1,57,000"; anything longer
+          // still grows the column rather than being cut.
+          style={detailed ? { minWidth: AMOUNT_COLUMN_WIDTH } : undefined}
+        >
+          {amount}
+        </Text>
 
-      {detailed ? <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} /> : null}
+        {detailed ? <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} /> : null}
+      </View>
     </View>
   );
 

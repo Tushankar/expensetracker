@@ -41,8 +41,8 @@ export async function shareTextFile(input: {
   await Sharing.shareAsync(file.uri, {
     mimeType: input.mimeType,
     dialogTitle: input.dialogTitle,
-    // Android reads this to decide which apps can receive the file; without it a
-    // CSV is offered to nothing useful.
+    // iOS picks the receiving apps from the UTI, Android from the MIME type
+    // above. Without this one a CSV is offered to nothing useful on iOS.
     UTI: 'public.comma-separated-values-text',
   });
 

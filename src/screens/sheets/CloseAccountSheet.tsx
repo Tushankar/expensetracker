@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { errorMessage, useDeleteProfile } from '@/api';
 import { BottomSheet, Button, Icon, Input, Text } from '@/components/ui';
@@ -31,6 +31,7 @@ export function CloseAccountSheet({ visible, onClose }: CloseAccountSheetProps) 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string>();
+  const confirmRef = useRef<TextInput>(null);
 
   const deleteProfile = useDeleteProfile();
 
@@ -86,6 +87,11 @@ export function CloseAccountSheet({ visible, onClose }: CloseAccountSheetProps) 
             disabled={!ready}
             loading={deleteProfile.isPending}
             onPress={() => void submit()}
+            accessibilityHint={
+              ready
+                ? 'Deletes your account and everything in it'
+                : `Enter your password and type ${CONFIRM_WORD} above to enable this`
+            }
           />
           <Button label="Keep my account" variant="ghost" size="md" fullWidth onPress={onClose} />
         </View>
@@ -115,7 +121,18 @@ export function CloseAccountSheet({ visible, onClose }: CloseAccountSheetProps) 
               key={line}
               style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
             >
-              <Icon name="close" size={12} color={theme.colors.negative} />
+              {/* A dot, not a cross. Six red ×s repeat the sheet's own close
+                  button down the list and read as things to dismiss, which is
+                  the opposite of what they are. */}
+              <View
+                style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: 2,
+                  marginHorizontal: 4,
+                  backgroundColor: theme.colors.negative,
+                }}
+              />
               <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
                 {line}
               </Text>
@@ -141,16 +158,31 @@ export function CloseAccountSheet({ visible, onClose }: CloseAccountSheetProps) 
           autoCapitalize="none"
           autoCorrect={false}
           textContentType="password"
+          returnKeyType="next"
+          onSubmitEditing={() => confirmRef.current?.focus()}
+          submitBehavior="submit"
         />
 
         <Input
+          ref={confirmRef}
           label={`Type ${CONFIRM_WORD} to confirm`}
-          placeholder={CONFIRM_WORD}
+          // Not the word itself: a field pre-printed with "DELETE" looks filled
+          // in, and someone who reads it that way is left staring at a disabled
+          // button with no idea what it is waiting for.
+          placeholder={`${CONFIRM_WORD.toLowerCase()}…`}
           value={confirm}
-          onChangeText={setConfirm}
+          onChangeText={(value) => {
+            setConfirm(value);
+            setError(undefined);
+          }}
           autoCapitalize="characters"
           autoCorrect={false}
-          maxLength={10}
+          // A little slack over the word itself: the match is trimmed, and a
+          // hard stop at exactly six characters turns a stray leading space
+          // into a field that silently refuses the last letter.
+          maxLength={CONFIRM_WORD.length + 2}
+          returnKeyType="done"
+          onSubmitEditing={() => void submit()}
         />
       </View>
     </BottomSheet>

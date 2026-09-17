@@ -83,13 +83,13 @@ export function TabBar({ state, descriptors, navigation, onAddPress }: TabBarPro
 
   return (
     // box-none lets taps fall through the transparent strip beside the add button.
-    <View style={{ height: barHeight + FAB_OVERHANG }} pointerEvents="box-none">
+    <View style={{ height: barHeight + FAB_OVERHANG, pointerEvents: 'box-none' }}>
       {/* The painted bar, inset from the top so the overhang strip stays clear. */}
       <View
-        pointerEvents="none"
         style={[
           StyleSheet.absoluteFill,
           {
+            pointerEvents: 'none',
             top: FAB_OVERHANG,
             backgroundColor: theme.colors.surface,
             borderTopWidth: StyleSheet.hairlineWidth,
@@ -112,12 +112,12 @@ export function TabBar({ state, descriptors, navigation, onAddPress }: TabBarPro
         {routes.slice(0, half).map((route, index) => renderTab(route, index))}
 
         {/* Reserves the add button's footprint so the tabs stay evenly spaced. */}
-        <View style={{ width: FAB_SIZE + theme.spacing.lg }} pointerEvents="none" />
+        <View style={{ width: FAB_SIZE + theme.spacing.lg, pointerEvents: 'none' }} />
 
         {routes.slice(half).map((route, index) => renderTab(route, index + half))}
       </View>
 
-      <View style={styles.fabWrap} pointerEvents="box-none">
+      <View style={[styles.fabWrap, styles.passThrough]}>
         <AddButton onPress={onAddPress} />
       </View>
     </View>
@@ -220,6 +220,7 @@ function AddButton({ onPress }: { onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  passThrough: { pointerEvents: 'box-none' },
   tab: {
     flex: 1,
     minWidth: 0,

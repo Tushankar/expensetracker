@@ -100,7 +100,7 @@ export function DonutChart({
       </Svg>
 
       {children ? (
-        <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, styles.center, styles.noTouch]}>
           {children}
         </View>
       ) : null}
@@ -109,5 +109,6 @@ export function DonutChart({
 }
 
 const styles = StyleSheet.create({
+  noTouch: { pointerEvents: 'none' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

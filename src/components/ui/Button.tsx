@@ -204,7 +204,7 @@ export function Button({
         ]}
       >
         {loading ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, styles.noTouch]}>
             <View style={styles.center}>
               <ActivityIndicator size="small" color={palette.foreground} />
             </View>
@@ -234,6 +234,7 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
+  noTouch: { pointerEvents: 'none' },
   fullWidth: { alignSelf: 'stretch' },
   autoWidth: { alignSelf: 'flex-start' },
   base: {

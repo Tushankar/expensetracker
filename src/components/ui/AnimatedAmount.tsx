@@ -96,7 +96,6 @@ export function AnimatedAmount({
       // A display element that happens to be an input. Everything that makes it
       // behave like one is turned off.
       editable={false}
-      pointerEvents="none"
       underlineColorAndroid="transparent"
       // iOS refuses to render a TextInput's value without one on first paint.
       value={placeholder ?? ''}
@@ -111,6 +110,9 @@ export function AnimatedAmount({
           // A TextInput carries platform padding a Text does not.
           padding: 0,
           margin: 0,
+          // A display element that happens to be an input: nothing here takes a
+          // touch, and the caret must never appear.
+          pointerEvents: 'none',
         },
         style,
       ]}
