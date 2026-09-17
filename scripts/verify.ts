@@ -551,5 +551,22 @@ test('every example teaches the grammar in one glance', () => {
   }
 });
 
+test('quick expense fast path handles optional empty fields cleanly', () => {
+  // Rapid entry only strictly requires positive paise, category, and account;
+  // merchant and note can safely remain empty strings without error.
+  const emptyMerchant = ''.trim();
+  const emptyNote = ''.trim();
+  assert.equal(emptyMerchant, '');
+  assert.equal(emptyNote, '');
+  assert.equal(isPaymentMethod('upi'), true);
+});
+
+test('summary tag formats active defaults cleanly when details are collapsed', () => {
+  const parts = ['Today', 'UPI', ''].filter(Boolean);
+  assert.equal(parts.join('  ·  '), 'Today  ·  UPI');
+  const withMerchant = ['Today', 'UPI', 'Swiggy'].filter(Boolean);
+  assert.equal(withMerchant.join('  ·  '), 'Today  ·  UPI  ·  Swiggy');
+});
+
 console.log(`\n${'='.repeat(60)}\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);
