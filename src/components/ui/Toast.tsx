@@ -122,7 +122,11 @@ export function Toast({ message, detail, tone = 'success', duration = 2600, onDi
 
 const styles = StyleSheet.create({
   wrap: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 16,

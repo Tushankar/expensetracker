@@ -531,12 +531,23 @@ export type AiChatMessage = {
   createdAt: string;
 };
 
+/**
+ * Where a category suggestion came from, in descending order of evidence.
+ *
+ * `memory` is this user's own filing history — the strongest signal there is, and
+ * the one that improves when they correct it. `merchant` is the built-in brand
+ * table. `model` is inference. The app says which, because they do not deserve
+ * equal trust.
+ */
+export type SuggestionSource = 'memory' | 'merchant' | 'model' | 'none';
+
 export type CategorySuggestion = {
   categoryId: string | null;
   categoryName: string | null;
   confidence: 'high' | 'medium' | 'low';
   reason: string;
   fromModel: boolean;
+  source: SuggestionSource;
   alternatives: { categoryId: string; categoryName: string }[];
 };
 

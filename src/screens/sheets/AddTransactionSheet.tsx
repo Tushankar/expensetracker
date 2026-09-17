@@ -48,6 +48,7 @@ import {
   RUPEE,
   applyAmountKey,
   formatAmountInput,
+  formatINR,
   paiseToRupeeInput,
   rupeesToPaise,
 } from '@/utils/currency';
@@ -128,6 +129,7 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
   const close = useUiStore((state) => state.closeEntrySheet);
   const lastUsed = useUiStore((state) => state.lastUsed);
   const rememberChoice = useUiStore((state) => state.rememberChoice);
+  const showToast = useUiStore((state) => state.showToast);
 
   const editing = sheet.mode === 'edit' ? sheet.transaction : null;
   const open = sheet.mode !== 'closed';
@@ -365,6 +367,10 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
         paymentMethod: proposal.paymentMethod,
       });
       successFeedback();
+      showToast({
+        message: 'Saved',
+        detail: [formatINR(proposal.amount), proposal.categoryName].filter(Boolean).join('  ·  '),
+      });
       handleClose();
     } catch (cause) {
       errorFeedback();
@@ -520,6 +526,14 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
         paymentMethod: method,
       });
       successFeedback();
+      // The sheet is about to unmount, so the confirmation is raised through the
+      // store: "saved" has to outlive the screen that saved it. It names the
+      // amount as well, because ₹40 and ₹4,000 look identical once the sheet has
+      // gone and only one of them is worth a second look.
+      showToast({
+        message: type === 'transfer' ? 'Transfer recorded' : 'Saved',
+        detail: [formatINR(paise), category?.name ?? merchant.trim()].filter(Boolean).join('  ·  '),
+      });
       handleClose();
     } catch (cause) {
       errorFeedback();
@@ -842,6 +856,7 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
             <CategoryProposal
               category={proposed}
               confidence={suggestion.data?.confidence ?? 'low'}
+              source={suggestion.data?.source ?? 'none'}
               reason={suggestion.data?.reason ?? ''}
               onUse={() => {
                 tapFeedback();
@@ -926,6 +941,8 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
 type CategoryProposalProps = {
   category: Category;
   confidence: 'high' | 'medium' | 'low';
+  /** Where the suggestion came from, which is what the badge announces. */
+  source: 'memory' | 'merchant' | 'model' | 'none';
   reason: string;
   onUse: () => void;
   onDismiss: () => void;
@@ -943,6 +960,7 @@ type CategoryProposalProps = {
 function CategoryProposal({
   category,
   confidence,
+  source,
   reason,
   onUse,
   onDismiss,
@@ -967,7 +985,14 @@ function CategoryProposal({
         <Text variant="caption" tone="tertiary" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
           Suggested category
         </Text>
-        {confidence === 'low' ? <Badge label="Not sure" tone="warning" /> : null}
+        {/* Where it came from, said plainly. "You filed this here before" earns a
+            different amount of trust from "a model thinks so", and the user is
+            the one who should be deciding how much. */}
+        {source === 'memory' ? (
+          <Badge label="From your history" tone="positive" />
+        ) : confidence === 'low' ? (
+          <Badge label="Not sure" tone="warning" />
+        ) : null}
         <Pressable
           onPress={onDismiss}
           hitSlop={10}
