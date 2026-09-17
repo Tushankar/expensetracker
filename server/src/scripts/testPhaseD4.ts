@@ -1,4 +1,4 @@
-import mongoose, { Types } from 'mongoose';
+import mongoose from 'mongoose';
 import { env } from '../config/env';
 import { UserModel } from '../modules/users/user.model';
 import { AccountModel } from '../modules/accounts/account.model';
@@ -9,8 +9,6 @@ import { PersonModel } from '../modules/people/person.model';
 import { MoneyOwedModel } from '../modules/moneyOwed/moneyOwed.model';
 import { TransactionModel } from '../modules/transactions/transaction.model';
 import { NotificationModel } from '../modules/notifications/notification.model';
-import { DeviceTokenModel } from '../modules/notifications/deviceToken.model';
-import { createTransaction } from '../modules/transactions/transaction.service';
 import { createMoneyOwed } from '../modules/moneyOwed/moneyOwed.service';
 import {
   evaluateBudgetAlertsForUser,
@@ -108,7 +106,7 @@ async function runTests() {
     color: '#FF5722',
     icon: 'restaurant',
   });
-  const catGroceries = await CategoryModel.create({
+  await CategoryModel.create({
     userId: userA._id,
     name: 'Groceries',
     group: 'Food',
@@ -125,7 +123,7 @@ async function runTests() {
   console.log('--- Section 1: Budget Alert Tests (80% warning, 100% exceeded, deduplication) ---');
 
   // Budget of ₹10,000 (1000000 paise) on Dining Out, warnAtPercent = 80
-  const budgetDining = await BudgetModel.create({
+  await BudgetModel.create({
     userId: userA._id,
     scope: 'category',
     categoryId: catFood._id,
@@ -223,7 +221,7 @@ async function runTests() {
   const in1Day = new Date(now.getTime() + 1 * 86400000);
 
   // 1. Rule due tomorrow (upcoming)
-  const recurringUpcoming = await RecurringModel.create({
+  await RecurringModel.create({
     userId: userA._id,
     name: 'Netflix Subscription',
     type: 'expense',
@@ -238,7 +236,7 @@ async function runTests() {
   });
 
   // 2. Rule due today
-  const recurringDueToday = await RecurringModel.create({
+  await RecurringModel.create({
     userId: userA._id,
     name: 'Broadband Bill',
     type: 'expense',
@@ -253,7 +251,7 @@ async function runTests() {
   });
 
   // 3. Paused rule due today (should NOT trigger)
-  const recurringPaused = await RecurringModel.create({
+  await RecurringModel.create({
     userId: userA._id,
     name: 'Gym Membership (Paused)',
     type: 'expense',
@@ -300,30 +298,30 @@ async function runTests() {
     type: 'loan',
     purpose: 'Dinner bill split',
     amount: 200000, // ₹2,000
-    dueDate: in1Day.toISOString(),
+    dueDate: in1Day,
   });
 
   // 2. Money I owe (payable) due today
-  const owedDueToday = await createMoneyOwed(userAId, {
+  await createMoneyOwed(userAId, {
     personId: String(personRohan._id),
     accountId: String(accountA._id),
     direction: 'i_owe',
     type: 'borrowed',
     purpose: 'Concert ticket share',
     amount: 150000, // ₹1,500
-    dueDate: now.toISOString(),
+    dueDate: now,
   });
 
   // 3. Overdue debt (due 3 days ago)
   const threeDaysAgo = new Date(now.getTime() - 3 * 86400000);
-  const owedOverdue = await createMoneyOwed(userAId, {
+  await createMoneyOwed(userAId, {
     personId: String(personRohan._id),
     accountId: String(accountA._id),
     direction: 'i_owe',
     type: 'borrowed',
     purpose: 'Old trip advance',
     amount: 500000, // ₹5,000
-    dueDate: threeDaysAgo.toISOString(),
+    dueDate: threeDaysAgo,
   });
 
   // Capture accounting state before evaluating reminders
@@ -439,26 +437,32 @@ async function runTests() {
   assert(userADevices.length === 2, '6.3 User A has exactly 2 active devices');
   const userBDevices = await notifService.listDevices(userBId);
   assert(userBDevices.length === 1, '6.4 User B has exactly 1 active device');
-  assert(userBDevices[0]?.token.includes('userB'), '6.5 User B cannot see User A devices');
+  assert(Boolean(userBDevices[0]?.token.includes('userB')), '6.5 User B cannot see User A devices');
 
   // 6. Delete device
   await notifService.deleteDevice(userAId, 'ExponentPushToken[device_token_userA_1]');
   const userADevicesAfter = await notifService.listDevices(userAId);
   assert(userADevicesAfter.length === 1, '6.6 Successfully deleted device token');
 
-  console.log('\n--- Section 7: Idempotency & Scheduler Run ---');
+  console.log('\n--- Section 7: Idempotency, Unusual Spending & Monthly Summary ---');
+
+  const unusualCount = await evaluateUnusualSpendingForUser(userAId);
+  assert(typeof unusualCount === 'number', '7.1 evaluateUnusualSpendingForUser executes cleanly');
+
+  const monthlyCount = await evaluateMonthlySummaryForUser(userAId);
+  assert(typeof monthlyCount === 'number', '7.2 evaluateMonthlySummaryForUser executes cleanly');
 
   // Run alert engine on User A
   const run1 = await runAllAlertsForUser(userAId);
-  assert(typeof run1.total === 'number', '7.1 runAllAlertsForUser returns total count');
+  assert(typeof run1.total === 'number', '7.3 runAllAlertsForUser returns total count');
 
   // Run alert engine a second time immediately
   const run2 = await runAllAlertsForUser(userAId);
-  assert(run2.total === 0, '7.2 Idempotency: Second consecutive alert engine run generates 0 duplicate notifications');
+  assert(run2.total === 0, '7.4 Idempotency: Second consecutive alert engine run generates 0 duplicate notifications');
 
   // Run alert engine a third time
   const run3 = await runAllAlertsForUser(userAId);
-  assert(run3.total === 0, '7.3 Idempotency: Third consecutive alert engine run generates 0 duplicate notifications');
+  assert(run3.total === 0, '7.5 Idempotency: Third consecutive alert engine run generates 0 duplicate notifications');
 
   console.log('\n--- Section 8: Notification Service CRUD & Unread Count ---');
 
