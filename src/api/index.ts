@@ -6,9 +6,12 @@ export {
   analyticsApi,
   authApi,
   categoryApi,
+  merchantApi,
+  receiptApi,
   transactionApi,
   userApi,
 } from './endpoints';
+export { fileFromUri, uploadToCloudinary } from './uploads';
 export {
   ApiError,
   NetworkError,

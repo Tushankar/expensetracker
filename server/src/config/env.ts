@@ -60,9 +60,44 @@ const schema = z.object({
    */
   GROQ_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
 
+  /**
+   * The model that reads receipts.
+   *
+   * Vision is a separate capability from prose, and not every Groq account has a
+   * model that has it — `GET /models` is the authority, not the docs. Left as a
+   * setting rather than hard-coded so a deployment can point at whatever its own
+   * account actually offers.
+   */
+  GROQ_VISION_MODEL: z.string().trim().default('qwen/qwen3.8-27b'),
+  /** Reading a receipt is slower than writing a sentence about one. */
+  GROQ_VISION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(40_000),
+
   /** Assistant calls per user per window. Groq costs money and time. */
   AI_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   AI_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+
+  /**
+   * Cloudinary, for receipt images.
+   *
+   * The secret signs upload requests and never leaves this server: the app asks
+   * for a signature, uploads straight to Cloudinary with it, and tells us the
+   * result — which we verify against the same secret before believing a word of
+   * it. Routing the bytes through this API instead would double the transfer and
+   * turn a phone-side progress bar into a lie.
+   *
+   * All three are optional together. Without them receipts are unavailable and
+   * the app says so, exactly as it does without a Groq key.
+   */
+  CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
+  CLOUDINARY_API_KEY: z.string().trim().optional(),
+  CLOUDINARY_API_SECRET: z.string().trim().optional(),
+  /** Receipts are filed per user beneath this, so one listing cannot show another's. */
+  CLOUDINARY_FOLDER: z.string().trim().default('paisa/receipts'),
+  /** A phone camera JPEG is ~2-4MB. Ten is generous and still bounded. */
+  RECEIPT_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  /** Uploads and extractions per user per window. */
+  RECEIPT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RECEIPT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
 
   /**
    * How often the recurring scheduler looks for work. Sixty seconds is far more

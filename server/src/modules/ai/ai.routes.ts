@@ -15,15 +15,18 @@ import {
   suggestCategory,
   summaryFromOverview,
 } from './ai.service';
+import { proposeFromText } from './quick.service';
 import {
   aiPeriodSchema,
   askSchema,
   categoriseSchema,
   chatHistorySchema,
+  quickParseSchema,
   type AiPeriodQuery,
   type AskInput,
   type CategoriseInput,
   type ChatHistoryQuery,
+  type QuickParseInput,
 } from './ai.schemas';
 import { AiMessageModel } from './aiMessage.model';
 import { isAiConfigured, toApiError } from './groq.client';
@@ -165,6 +168,24 @@ aiRouter.delete('/chat', async (req, res) => {
     userId: new Types.ObjectId(currentUser(req).id),
   });
   ok(res, { deleted: result.deletedCount ?? 0 });
+});
+
+/**
+ * Reads one line of shorthand into a proposed transaction. Writes nothing.
+ *
+ * The amount, the date and the payment method are found by rule, in
+ * `quickEntry.ts`; only the category is ever inferred. A model that produced the
+ * number would be a model nothing checked, on the one screen in this app where a
+ * wrong figure gets saved rather than merely read.
+ */
+aiRouter.post('/parse', validate({ body: quickParseSchema }), async (req, res) => {
+  const body = req.body as QuickParseInput;
+
+  try {
+    ok(res, { proposal: await proposeFromText(currentUser(req).id, body.text, body.type) });
+  } catch (error) {
+    throw toApiError(error);
+  }
 });
 
 /**

@@ -15,6 +15,8 @@ import {
   analyticsApi,
   authApi,
   budgetApi,
+  merchantApi,
+  receiptApi,
   categoryApi,
   notificationApi,
   recurringApi,
@@ -22,6 +24,7 @@ import {
   userApi,
 } from './endpoints';
 import { queryKeys } from './queryClient';
+import { fileFromUri, uploadToCloudinary } from './uploads';
 import type {
   Account,
   AuthSession,
@@ -675,5 +678,114 @@ export function useSuggestCategory() {
       amount?: number;
       type?: 'expense' | 'income';
     }) => aiApi.categorise(input),
+  });
+}
+
+
+// ------------------------------------------------------------------- step 5
+
+/**
+ * Reads one typed line into a proposed transaction.
+ *
+ * A mutation rather than a query: it is an action someone takes, not state a
+ * screen subscribes to, and nothing should fire it on every keystroke.
+ */
+export function useParseQuickEntry() {
+  return useMutation({
+    mutationFn: (input: { text: string; type?: 'expense' | 'income' }) => aiApi.parse(input),
+  });
+}
+
+export function useReceiptStatus() {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.receiptStatus,
+    enabled: status === 'signedIn',
+    // Configuration does not change while the app is open.
+    staleTime: Infinity,
+    queryFn: () => receiptApi.status(),
+  });
+}
+
+export function useReceipts(transactionId: string | undefined) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.receipts(transactionId),
+    enabled: status === 'signedIn' && Boolean(transactionId),
+    queryFn: () => receiptApi.list({ transactionId }),
+  });
+}
+
+/**
+ * The whole upload, as one mutation: ticket, transfer, record.
+ *
+ * Kept together because the three steps are meaningless apart — a ticket nobody
+ * spends is nothing, and an image Cloudinary holds that our API never heard of is
+ * worse than nothing. Progress is reported through the caller's callback because
+ * it arrives during the mutation rather than at the end of it.
+ */
+export function useUploadReceipt() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      uri: string;
+      mimeType?: string | null;
+      transactionId?: string;
+      onProgress?: (fraction: number) => void;
+    }) => {
+      const ticket = await receiptApi.ticket();
+      const uploaded = await uploadToCloudinary(ticket, fileFromUri(input.uri, input.mimeType), {
+        onProgress: input.onProgress,
+      });
+      return receiptApi.record({ ...uploaded, transactionId: input.transactionId });
+    },
+    onSuccess: (receipt) => {
+      void client.invalidateQueries({ queryKey: queryKeys.receipts(receipt.transactionId ?? undefined) });
+    },
+  });
+}
+
+export function useExtractReceipt() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => receiptApi.extract(id),
+    onSuccess: (receipt) => {
+      void client.invalidateQueries({ queryKey: queryKeys.receipts(receipt.transactionId ?? undefined) });
+    },
+  });
+}
+
+export function useAttachReceipt() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; transactionId: string | null }) =>
+      receiptApi.attach(input.id, input.transactionId),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['receipts'] }),
+  });
+}
+
+export function useDeleteReceipt() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => receiptApi.remove(id),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['receipts'] }),
+  });
+}
+
+/** Merchant names this user has used, for the entry field. */
+export function useMerchantSuggestions(query: string, enabled = true) {
+  const status = useAuthStore((state) => state.status);
+
+  return useQuery({
+    queryKey: queryKeys.merchants(query),
+    enabled: status === 'signedIn' && enabled,
+    staleTime: 60_000,
+    queryFn: () => merchantApi.list(query),
   });
 }

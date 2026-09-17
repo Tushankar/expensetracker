@@ -30,6 +30,10 @@ export const queryKeys = {
   aiStatus: ['ai', 'status'] as const,
   aiSummary: (range: Record<string, unknown>) => ['ai', 'summary', range] as const,
   aiChat: ['ai', 'chat'] as const,
+
+  receiptStatus: ['receipts', 'status'] as const,
+  receipts: (transactionId?: string) => ['receipts', 'list', transactionId ?? null] as const,
+  merchants: (query: string) => ['merchants', query] as const,
 };
 
 /**

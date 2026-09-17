@@ -10,6 +10,7 @@ import {
   type AnalyticsOverview,
 } from '../analytics/analytics.service';
 import { CategoryModel } from '../categories/category.model';
+import { recallMerchant } from '../merchants/merchant.service';
 
 import { checkGrounding, verify, type VerifiedReply } from './ai.guard';
 import { complete, isAiConfigured, AiUnavailableError } from './groq.client';
@@ -67,12 +68,22 @@ export type AiAnswer = {
   };
 };
 
+export type SuggestionSource =
+  /** This user has filed this merchant before. The strongest evidence there is. */
+  | 'memory'
+  /** A brand in the built-in table. Instant, free, and never wrong about Swiggy. */
+  | 'merchant'
+  | 'model'
+  | 'none';
+
 export type CategorySuggestion = {
   categoryId: string | null;
   categoryName: string | null;
   confidence: 'high' | 'medium' | 'low';
   reason: string;
+  /** Kept alongside `source` because the app already renders a model badge from it. */
   fromModel: boolean;
+  source: SuggestionSource;
   /** Other plausible categories, so the picker can lead with them. */
   alternatives: { categoryId: string; categoryName: string }[];
 };
@@ -671,12 +682,64 @@ export async function suggestCategory(
       confidence: 'low',
       reason: 'No categories to choose from',
       fromModel: false,
+      source: 'none',
       alternatives: [],
     };
   }
 
   const byName = new Map(categories.map((entry) => [entry.name, entry]));
+  const byId = new Map(categories.map((entry) => [String(entry._id), entry]));
+
+  /**
+   * What this user did last time, before anything else gets a turn.
+   *
+   * Their own history beats a brand table and beats a language model: it is
+   * evidence about this person rather than about people in general, it costs one
+   * indexed read instead of a network round trip, and it is the only one of the
+   * three that improves when they correct it. Someone who files Amazon under
+   * Electronics should stop being told it is Shopping.
+   */
+  const remembered = input.merchant.trim() ? await recallMerchant(userId, input.merchant) : null;
+  const memoryMatch = remembered ? byId.get(remembered.categoryId) : undefined;
+
+  if (remembered && memoryMatch) {
+    return {
+      categoryId: String(memoryMatch._id),
+      categoryName: memoryMatch.name,
+      // Once is a precedent, twice is a habit.
+      confidence: remembered.count >= 2 ? 'high' : 'medium',
+      reason:
+        remembered.count >= 2
+          ? `You have filed ${remembered.merchantLabel} here ${remembered.count} times`
+          : `You filed ${remembered.merchantLabel} here last time`,
+      fromModel: false,
+      source: 'memory',
+      alternatives: alternativesFor(memoryMatch.group, categories, memoryMatch.name),
+    };
+  }
+
   const local = localCategoryGuess(input.merchant, input.description, [...byName.keys()]);
+  const localMatch = local ? byName.get(local) : undefined;
+
+  /**
+   * A brand in the built-in table, before the model is asked.
+   *
+   * Swiggy is a food delivery company. No amount of inference improves on that,
+   * and asking costs a network round trip on the one screen where latency is felt
+   * as a keystroke. The table only holds merchants that are unambiguous, which is
+   * what makes skipping the model safe rather than merely fast.
+   */
+  if (localMatch) {
+    return {
+      categoryId: String(localMatch._id),
+      categoryName: localMatch.name,
+      confidence: 'high',
+      reason: `${input.merchant.trim()} is a known merchant`,
+      fromModel: false,
+      source: 'merchant',
+      alternatives: alternativesFor(localMatch.group, categories, localMatch.name),
+    };
+  }
 
   if (!isAiConfigured()) {
     return local
@@ -686,6 +749,7 @@ export async function suggestCategory(
           confidence: 'medium',
           reason: 'Matched a known merchant',
           fromModel: false,
+          source: 'merchant',
           alternatives: [],
         }
       : {
@@ -694,6 +758,7 @@ export async function suggestCategory(
           confidence: 'low',
           reason: 'No match found',
           fromModel: false,
+          source: 'none',
           alternatives: [],
         };
   }
@@ -747,6 +812,7 @@ ${categories.map((entry) => entry.name).join('\n')}`,
       confidence,
       reason: (typeof parsed.reason === 'string' ? parsed.reason : '').slice(0, 80) || 'Best match',
       fromModel: true,
+      source: 'model',
       alternatives: alternativesFor(match.group, categories, match.name),
     };
   } catch {
@@ -757,6 +823,7 @@ ${categories.map((entry) => entry.name).join('\n')}`,
           confidence: 'medium',
           reason: 'Matched a known merchant',
           fromModel: false,
+          source: 'merchant',
           alternatives: [],
         }
       : {
@@ -765,6 +832,7 @@ ${categories.map((entry) => entry.name).join('\n')}`,
           confidence: 'low',
           reason: 'Could not tell from the name',
           fromModel: false,
+          source: 'none',
           alternatives: [],
         };
   }

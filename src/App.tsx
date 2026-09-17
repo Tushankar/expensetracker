@@ -17,10 +17,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { createQueryClient, useTimezoneSync } from '@/api';
+import { Toast } from '@/components/ui';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { toNavigationTheme } from '@/navigation/navigationTheme';
 import { AddTransactionSheet } from '@/screens/sheets/AddTransactionSheet';
 import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
 import { ThemeProvider, useTheme } from '@/theme';
 
 // Hold the native splash until Inter is ready, so text never renders in the
@@ -97,6 +99,7 @@ function AppShell() {
         {/* Mounted at the root so it can cover the tab bar it is launched from,
             and only while there is a session for it to write to. */}
         {signedIn ? <AddTransactionSheet /> : null}
+        <ToastHost />
       </NavigationContainer>
     </View>
   );
@@ -105,3 +108,27 @@ function AppShell() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
 });
+
+/**
+ * Renders whatever the UI store last had to say.
+ *
+ * Keyed on the toast's id so a second message restarts the animation rather than
+ * inheriting the first one's timer, and mounted above the navigator so it survives
+ * the screen that raised it unmounting.
+ */
+function ToastHost() {
+  const toast = useUiStore((state) => state.toast);
+  const dismiss = useUiStore((state) => state.dismissToast);
+
+  if (!toast) return null;
+
+  return (
+    <Toast
+      key={toast.id}
+      message={toast.message}
+      detail={toast.detail}
+      tone={toast.tone}
+      onDismiss={dismiss}
+    />
+  );
+}

@@ -11,7 +11,18 @@ import { ApiError } from '../../lib/ApiError';
  * into the JavaScript, and a bundle is a zip anyone can open.
  */
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+export type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  /**
+   * An image for the model to look at, as an https URL or a `data:` URI.
+   *
+   * Only meaningful on a user message and only to a vision-capable model. Sent as
+   * OpenAI-style content parts, which is what Groq speaks; the message keeps its
+   * plain-string shape here so every non-vision caller is untouched.
+   */
+  imageUrl?: string;
+};
 
 export type CompletionOptions = {
   messages: ChatMessage[];
@@ -31,6 +42,15 @@ export type CompletionOptions = {
    * need deliberation, so they ask for less of it.
    */
   reasoning?: 'low' | 'medium' | 'high';
+  /** Overrides `GROQ_TIMEOUT_MS`. Reading a receipt takes longer than writing a line. */
+  timeoutMs?: number;
+  /**
+   * Whether a rate limit may fall back to the small model.
+   *
+   * False for vision: the fast model cannot see, so downgrading would turn "busy"
+   * into a confidently wrong answer about an image it never received.
+   */
+  allowDowngrade?: boolean;
   signal?: AbortSignal;
 };
 
@@ -77,13 +97,35 @@ export async function complete(options: CompletionOptions): Promise<string> {
       }
     }
 
-    if (primary !== env.GROQ_FAST_MODEL) {
+    if (options.allowDowngrade !== false && primary !== env.GROQ_FAST_MODEL) {
       logger.info({ from: primary, to: env.GROQ_FAST_MODEL }, 'groq rate limited, downgrading');
       return attempt(options, env.GROQ_FAST_MODEL);
     }
 
     throw new AiUnavailableError('The assistant is busy. Try again in a moment.');
   }
+}
+
+/**
+ * A message in the shape the API expects.
+ *
+ * Plain text stays a plain string — several Groq models reject the content-array
+ * form outright, so promoting every message would break the assistant to support
+ * a feature it does not use.
+ */
+function toWireMessage(message: ChatMessage): {
+  role: string;
+  content: string | { type: string; text?: string; image_url?: { url: string } }[];
+} {
+  if (!message.imageUrl) return { role: message.role, content: message.content };
+
+  return {
+    role: message.role,
+    content: [
+      { type: 'text', text: message.content },
+      { type: 'image_url', image_url: { url: message.imageUrl } },
+    ],
+  };
 }
 
 /** A 429 that is worth retrying, carrying the delay Groq asked for. */
@@ -113,7 +155,7 @@ async function attempt(options: CompletionOptions, model: string): Promise<strin
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.GROQ_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? env.GROQ_TIMEOUT_MS);
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort);
 
@@ -128,7 +170,7 @@ async function attempt(options: CompletionOptions, model: string): Promise<strin
       },
       body: JSON.stringify({
         model,
-        messages: options.messages,
+        messages: options.messages.map(toWireMessage),
         temperature: options.temperature ?? 0.2,
         max_completion_tokens: options.maxTokens ?? 500,
         ...(options.reasoning ? { reasoning_effort: options.reasoning } : {}),
@@ -188,7 +230,7 @@ async function attempt(options: CompletionOptions, model: string): Promise<strin
 /** Turns an `AiUnavailableError` into the API's own failure shape. */
 export function toApiError(error: unknown): ApiError {
   if (error instanceof AiUnavailableError) {
-    return new ApiError(503, 'INTERNAL', error.message);
+    return ApiError.serviceUnavailable(error.message);
   }
   return ApiError.internal('The assistant could not answer just now', error);
 }

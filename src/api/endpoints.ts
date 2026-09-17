@@ -9,6 +9,13 @@ import type {
   AnalyticsOverview,
   AppNotification,
   CategorySuggestion,
+  MerchantMemory,
+  MerchantSuggestion,
+  QuickEntryProposal,
+  Receipt,
+  ReceiptStatus,
+  UploadTicket,
+  UploadedImage,
   AuthSession,
   BudgetProgress,
   BudgetSummary,
@@ -387,6 +394,14 @@ export const aiApi = {
     return requestData<{ deleted: number }>('/ai/chat', { method: 'DELETE' });
   },
 
+  /** Reads one typed line into a proposed transaction. Writes nothing. */
+  parse(input: { text: string; type?: 'expense' | 'income' }) {
+    return requestData<{ proposal: QuickEntryProposal }>('/ai/parse', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.proposal);
+  },
+
   /** Suggests a category. Writes nothing — the user always chooses. */
   categorise(input: {
     merchant: string;
@@ -398,5 +413,77 @@ export const aiApi = {
       method: 'POST',
       body: input,
     }).then((data) => data.suggestion);
+  },
+};
+
+
+// ------------------------------------------------------------------- step 5
+
+export const merchantApi = {
+  /** Names this user has used before, most-used first. */
+  list(query = '', limit = 8) {
+    return requestData<{ merchants: MerchantSuggestion[] }>('/merchants', {
+      params: { q: query, limit },
+    }).then((data) => data.merchants);
+  },
+
+  /** What they usually file one merchant under. No model involved. */
+  recall(merchant: string) {
+    return requestData<{ memory: MerchantMemory | null }>('/merchants/recall', {
+      params: { merchant },
+    }).then((data) => data.memory);
+  },
+
+  /** The way out of a memory that learned something wrong. */
+  forget(merchant: string) {
+    return requestData<{ forgotten: number }>('/merchants', {
+      method: 'DELETE',
+      body: { merchant },
+    });
+  },
+};
+
+export const receiptApi = {
+  status() {
+    return requestData<ReceiptStatus>('/receipts/status');
+  },
+
+  /** Permission to upload one image. Spent immediately, never stored. */
+  ticket() {
+    return requestData<{ ticket: UploadTicket }>('/receipts/signature', {
+      method: 'POST',
+    }).then((data) => data.ticket);
+  },
+
+  /** Tells our API what Cloudinary stored. It verifies the signature itself. */
+  record(input: UploadedImage & { transactionId?: string }) {
+    return requestData<{ receipt: Receipt }>('/receipts', {
+      method: 'POST',
+      body: input,
+    }).then((data) => data.receipt);
+  },
+
+  list(filter: { transactionId?: string } = {}) {
+    return requestData<{ receipts: Receipt[] }>('/receipts', { params: filter }).then(
+      (data) => data.receipts,
+    );
+  },
+
+  /** Reads the image. Applies nothing — the user confirms each field. */
+  extract(id: string) {
+    return requestData<{ receipt: Receipt }>(`/receipts/${id}/extract`, {
+      method: 'POST',
+    }).then((data) => data.receipt);
+  },
+
+  attach(id: string, transactionId: string | null) {
+    return requestData<{ receipt: Receipt }>(`/receipts/${id}/attach`, {
+      method: 'POST',
+      body: { transactionId },
+    }).then((data) => data.receipt);
+  },
+
+  remove(id: string) {
+    return requestData<{ deleted: boolean }>(`/receipts/${id}`, { method: 'DELETE' });
   },
 };

@@ -39,6 +39,14 @@ export type BottomSheetProps = {
   showHandle?: boolean;
   /** Set false for destructive confirmations that need an explicit choice. */
   dismissOnBackdropPress?: boolean;
+  /**
+   * Controls beside the close button — usually one or two `IconButton`s.
+   *
+   * For alternative ways into the same sheet rather than for actions: the entry
+   * sheet uses it to offer typing or a photograph without spending a row of the
+   * body on either, which would slow the path it is built for.
+   */
+  headerAction?: ReactNode;
 };
 
 /** Drag distance past which the sheet closes instead of springing back. */
@@ -63,6 +71,7 @@ export function BottomSheet({
   maxHeightRatio = 0.9,
   showHandle = true,
   dismissOnBackdropPress = true,
+  headerAction,
 }: BottomSheetProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -223,6 +232,7 @@ export function BottomSheet({
                           </Text>
                         ) : null}
                       </View>
+                      {headerAction}
                       <IconButton
                         name="close"
                         onPress={onClose}

@@ -6,6 +6,8 @@ import { withTransaction } from '../../lib/session';
 import { zoneOrDefault } from '../../lib/time';
 import { adjustBalance, requireOwnedAccount } from '../accounts/account.service';
 import { evaluateBudgets } from '../budgets/budget.service';
+import { rememberMerchant } from '../merchants/merchant.service';
+import { detachFromTransaction } from '../receipts/receipt.service';
 import { requireOwnedCategory } from '../categories/category.service';
 import { UserModel } from '../users/user.model';
 
@@ -216,6 +218,10 @@ export async function createTransaction(
     return toPublicTransaction(transaction);
   }).then((created) => {
     afterLedgerChange(userId, input.date);
+    // What someone actually saved is the only confirmation that exists. Accepting
+    // a suggestion and overriding one both arrive here, and both are the user
+    // telling us where this merchant belongs.
+    void rememberMerchant(userId, input.merchant, created.categoryId);
     return created;
   });
 }
@@ -316,6 +322,11 @@ export async function updateTransaction(
 
     await applyEffects([...before, ...balanceEffects(transaction)], session);
 
+    // An edit is the strongest correction there is: someone looked at what was
+    // filed and changed it. Recording it here is what makes "remember my
+    // corrections" true rather than aspirational.
+    void rememberMerchant(userId, transaction.merchant, transaction.categoryId);
+
     // Both ends: an edit that moved the date out of September and into October
     // can take September back under its cap and push October over it.
     afterLedgerChange(userId, previousDate, transaction.date);
@@ -336,6 +347,11 @@ export async function deleteTransaction(userId: string, transactionId: string): 
     const when = transaction.date;
     await applyEffects(invert(balanceEffects(transaction)), session);
     await transaction.deleteOne({ session });
+
+    // The image outlives the entry it was attached to. Deleting someone's
+    // photograph because they corrected a typo in the amount would be a surprise,
+    // and an unpleasant one; the receipt simply goes back to being unattached.
+    void detachFromTransaction(userId, transactionId);
 
     // Deleting can take a budget back under its cap; the alert for that month is
     // already recorded and stays, but the next write should re-evaluate honestly.

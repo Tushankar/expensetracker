@@ -11,6 +11,13 @@ export const ErrorCode = {
   CONFLICT: 'CONFLICT',
   RATE_LIMITED: 'RATE_LIMITED',
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+  /**
+   * A feature this build can do but this deployment is not set up for — no Groq
+   * key, no Cloudinary credentials. Distinct from INTERNAL because the app should
+   * explain it rather than apologise for it: "receipts are not configured" is a
+   * different sentence from "something went wrong", and retrying will not help.
+   */
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   INTERNAL: 'INTERNAL',
 } as const;
 
@@ -68,6 +75,10 @@ export class ApiError extends Error {
 
   static conflict(message: string, meta?: Record<string, unknown>) {
     return new ApiError(409, ErrorCode.CONFLICT, message, { meta });
+  }
+
+  static serviceUnavailable(message: string, meta?: Record<string, unknown>) {
+    return new ApiError(503, ErrorCode.SERVICE_UNAVAILABLE, message, { meta });
   }
 
   static internal(message = 'Something went wrong', cause?: unknown) {

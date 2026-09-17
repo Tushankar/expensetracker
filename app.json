@@ -41,7 +41,15 @@
           "userInterfaceStyle": "dark"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Paisa uses your photos so you can attach a receipt to an expense.",
+          "cameraPermission": "Paisa uses the camera so you can photograph a receipt.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "reactCompiler": true

@@ -7,6 +7,14 @@ export type EntrySheetState =
   | { mode: 'create'; type: TransactionType }
   | { mode: 'edit'; transaction: Transaction };
 
+/** A one-off confirmation. Null when nothing is being announced. */
+export type ToastState = {
+  id: number;
+  message: string;
+  detail?: string;
+  tone?: 'success' | 'error' | 'neutral';
+} | null;
+
 type UiState = {
   entrySheet: EntrySheetState;
   /**
@@ -45,6 +53,17 @@ type UiState = {
       paymentMethod?: PaymentMethod;
     },
   ) => void;
+
+  /**
+   * The last confirmation, if any.
+   *
+   * Lives here rather than in the sheet because the sheet is unmounting at the
+   * moment it has something to say: "saved" has to outlive the screen that saved
+   * it, or it never appears at all.
+   */
+  toast: ToastState;
+  showToast: (toast: { message: string; detail?: string; tone?: 'success' | 'error' | 'neutral' }) => void;
+  dismissToast: () => void;
 };
 
 /**
@@ -69,6 +88,12 @@ export const useUiStore = create<UiState>((set) => ({
       entrySession: state.entrySession + 1,
     })),
   closeEntrySheet: () => set({ entrySheet: { mode: 'closed' } }),
+
+  toast: null,
+  // The id forces a remount, so a second confirmation restarts the animation
+  // instead of inheriting the first one's half-finished timer.
+  showToast: (toast) => set({ toast: { ...toast, id: Date.now() } }),
+  dismissToast: () => set({ toast: null }),
 
   lastUsed: {},
   rememberChoice: (type, choice) =>

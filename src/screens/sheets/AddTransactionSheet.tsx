@@ -1,26 +1,36 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 
 import {
   errorMessage,
   useAccounts,
+  useAttachReceipt,
   useCategories,
   useCreateTransaction,
+  useDeleteReceipt,
+  useExtractReceipt,
+  useParseQuickEntry,
+  useReceiptStatus,
   useSuggestCategory,
   useUpdateTransaction,
+  useUploadReceipt,
   type Account,
   type Category,
   type CreateTransactionInput,
   type PaymentMethod,
+  type QuickEntryProposal,
+  type Receipt,
   type TransactionType,
 } from '@/api';
-import { PAYMENT_METHOD_LABEL } from '@/api/types';
+import { PAYMENT_METHOD_LABEL, isPaymentMethod } from '@/api/types';
 import { toIconName } from '@/components/icons/registry';
 import {
   Badge,
   BottomSheet,
   Button,
   Icon,
+  IconButton,
   IconTile,
   Input,
   Keypad,
@@ -30,6 +40,7 @@ import {
   Text,
   type SegmentOption,
 } from '@/components/ui';
+import { ProposalPreview, QuickEntryPanel, ReceiptPanel } from '@/components/entry';
 import { AccountPicker, CategoryPicker, DatePicker, MethodPicker } from '@/screens/sheets/pickers';
 import { useUiStore, type EntrySheetState } from '@/store/uiStore';
 import { categoryColor, useTheme } from '@/theme';
@@ -41,7 +52,7 @@ import {
   rupeesToPaise,
 } from '@/utils/currency';
 import { formatDayLabel } from '@/utils/date';
-import { errorFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
+import { errorFeedback, mediumFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
 
 const KIND_OPTIONS: readonly SegmentOption<TransactionType>[] = [
   { value: 'expense', label: 'Expense' },
@@ -55,8 +66,25 @@ const KIND_OPTIONS: readonly SegmentOption<TransactionType>[] = [
  */
 const SHEET_HEIGHT_RATIO = 0.92;
 
-/** Which panel the sheet is showing. `form` is the amount pad. */
-type Step = 'form' | 'category' | 'account' | 'destination' | 'method' | 'date';
+/**
+ * Which panel the sheet is showing. `form` is the amount pad — the default, and
+ * the one the whole design is tuned for.
+ *
+ * `quick`, `preview` and `receipt` are alternative ways *in*, reached from two
+ * icons in the header rather than from anything in the body. That placement is
+ * the point: three input methods should cost the fast path nothing, and a row of
+ * mode switches above the keypad would cost it a glance every single time.
+ */
+type Step =
+  | 'form'
+  | 'category'
+  | 'account'
+  | 'destination'
+  | 'method'
+  | 'date'
+  | 'quick'
+  | 'preview'
+  | 'receipt';
 
 const STEP_TITLE: Record<Exclude<Step, 'form'>, string> = {
   category: 'Choose a category',
@@ -64,6 +92,9 @@ const STEP_TITLE: Record<Exclude<Step, 'form'>, string> = {
   destination: 'Transfer to',
   method: 'How did you pay?',
   date: 'When was this?',
+  quick: 'Type it out',
+  preview: 'Does this look right?',
+  receipt: 'Scan a bill',
 };
 
 /**
@@ -137,6 +168,18 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
   const createMutation = useCreateTransaction();
   const updateMutation = useUpdateTransaction();
   const suggestion = useSuggestCategory();
+
+  // ---------------------------------------------------------- quick + receipt
+  const parseQuick = useParseQuickEntry();
+  const receiptStatus = useReceiptStatus();
+  const uploadReceipt = useUploadReceipt();
+  const extractReceipt = useExtractReceipt();
+  const attachReceipt = useAttachReceipt();
+  const deleteReceipt = useDeleteReceipt();
+
+  const [proposal, setProposal] = useState<QuickEntryProposal | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const saving = createMutation.isPending || updateMutation.isPending;
 
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
@@ -244,6 +287,188 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
 
   const paise = rupeesToPaise(amount);
 
+  /**
+   * Fills the form from a proposal, without saving it.
+   *
+   * Used by both alternative entry paths, and by `Edit` on the preview. Every
+   * field lands in the same state the keypad writes to, so what follows is the
+   * ordinary form with the ordinary Save button — there is no second write path
+   * that could behave differently from the one people use every day.
+   */
+  function applyProposal(next: QuickEntryProposal) {
+    if (next.amount !== null) setAmount(paiseToRupeeInput(next.amount));
+    if (next.merchant) {
+      setMerchant(next.merchant);
+      setShowDetails(true);
+    }
+    if (next.categoryId) setCategoryPick(next.categoryId);
+    if (next.accountId) setAccountPick(next.accountId);
+    setMethodPick(next.paymentMethod);
+    setDate(new Date(next.date));
+    setError(undefined);
+  }
+
+  function handleParsed(text: string) {
+    parseQuick.mutate(
+      { text, type: type === 'transfer' ? 'expense' : type },
+      {
+        onSuccess: (result) => {
+          setProposal(result);
+          // A parse with no amount is not a result worth previewing — it goes
+          // straight to the form with whatever it did find, which is faster than
+          // showing someone a confirmation card with a dash on it.
+          if (result.amount === null) {
+            applyProposal(result);
+            setStep('form');
+            errorFeedback();
+            setError('No amount in that. Type it on the keypad.');
+            return;
+          }
+          successFeedback();
+          setStep('preview');
+        },
+      },
+    );
+  }
+
+  /**
+   * Saves straight from the preview.
+   *
+   * The proposal is applied to the form state first and then submitted, so this
+   * goes through exactly the same validation and the same mutation as a manual
+   * entry. A shortcut that wrote directly would be a second code path to keep
+   * correct, and the one that gets it wrong is always the one used less.
+   */
+  async function saveProposal() {
+    if (!proposal || proposal.amount === null || !proposal.categoryId) return;
+
+    const accountForSave = proposal.accountId ?? accountId;
+    if (!accountForSave) return fail('Pick an account');
+
+    try {
+      const createdTransaction = await createMutation.mutateAsync({
+        type: type === 'transfer' ? 'expense' : type,
+        amount: proposal.amount,
+        accountId: accountForSave,
+        categoryId: proposal.categoryId,
+        merchant: proposal.merchant,
+        description: '',
+        paymentMethod: proposal.paymentMethod,
+        date: new Date(proposal.date).toISOString(),
+      });
+
+      if (receipt) await attachReceipt.mutateAsync({ id: receipt.id, transactionId: createdTransaction.id });
+
+      rememberChoice(type === 'transfer' ? 'expense' : type, {
+        accountId: accountForSave,
+        categoryId: proposal.categoryId,
+        paymentMethod: proposal.paymentMethod,
+      });
+      successFeedback();
+      handleClose();
+    } catch (cause) {
+      errorFeedback();
+      setError(errorMessage(cause));
+    }
+  }
+
+  // ------------------------------------------------------------------ receipt
+
+  /**
+   * Picks an image, uploads it, then reads it.
+   *
+   * Permission is requested at the moment it is needed rather than on launch,
+   * which is both the platform guidance and simply more honest: an app that asks
+   * for the camera before you have asked it for anything is one you say no to.
+   */
+  async function pickImage(source: 'camera' | 'library') {
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        source === 'camera' ? 'Camera access is off' : 'Photo access is off',
+        'Paisa needs it to attach a bill. You can turn it on in Settings.',
+      );
+      return;
+    }
+
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.7 });
+
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset) return;
+
+    setUploadProgress(0);
+    try {
+      const stored = await uploadReceipt.mutateAsync({
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        onProgress: setUploadProgress,
+      });
+      setReceipt(stored);
+      mediumFeedback();
+
+      if (receiptStatus.data?.reading) {
+        const read = await extractReceipt.mutateAsync(stored.id);
+        setReceipt(read);
+        successFeedback();
+      }
+    } catch {
+      errorFeedback();
+    } finally {
+      setUploadProgress(null);
+    }
+  }
+
+  /**
+   * Takes what the bill said into the form.
+   *
+   * Only fields that were actually legible, and only into the form — never into a
+   * saved transaction. Anything the model could not read is left exactly as the
+   * user had it, because overwriting a typed amount with a blank would be the
+   * worst possible reading of "extract".
+   */
+  function applyReceipt() {
+    const extraction = receipt?.extraction;
+
+    if (extraction) {
+      if (extraction.amount !== null) setAmount(paiseToRupeeInput(extraction.amount));
+      if (extraction.merchant) {
+        setMerchant(extraction.merchant);
+        setShowDetails(true);
+      }
+      if (extraction.date) setDate(new Date(extraction.date));
+      if (extraction.paymentMethod && isPaymentMethod(extraction.paymentMethod)) {
+        setMethodPick(extraction.paymentMethod);
+      }
+
+      // The category is never on a receipt, so it is asked for the same way it is
+      // anywhere else: from the merchant, through memory first.
+      if (extraction.merchant) {
+        suggestion.mutate({
+          merchant: extraction.merchant,
+          amount: extraction.amount ?? undefined,
+          type: type === 'income' ? 'income' : 'expense',
+        });
+      }
+    }
+
+    tapFeedback();
+    setStep('form');
+  }
+
+  function discardReceipt() {
+    const current = receipt;
+    setReceipt(null);
+    setStep('form');
+    if (current) deleteReceipt.mutate(current.id);
+  }
+
   function fail(message: string) {
     setError(message);
     errorFeedback();
@@ -281,7 +506,11 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
           type === 'transfer'
             ? { type, ...base, destinationAccountId: destinationId as string }
             : { type, ...base, categoryId: categoryId as string };
-        await createMutation.mutateAsync(input);
+        const saved = await createMutation.mutateAsync(input);
+
+        // The receipt was uploaded before the transaction existed, which is the
+        // natural order at a counter. This is where the two meet.
+        if (receipt) await attachReceipt.mutateAsync({ id: receipt.id, transactionId: saved.id });
       }
 
       rememberChoice(type, {
@@ -307,6 +536,81 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
         : 'Transfer money';
 
   const loadingReferences = accountsQuery.isLoading || categoriesQuery.isLoading;
+
+  // ----------------------------------------------------- the typed way in
+  if (step === 'quick') {
+    return (
+      <BottomSheet
+        visible={open}
+        onClose={() => setStep('form')}
+        title={STEP_TITLE.quick}
+        subtitle="One line. Nothing is saved until you confirm."
+        maxHeightRatio={SHEET_HEIGHT_RATIO}
+      >
+        <QuickEntryPanel
+          onSubmit={handleParsed}
+          loading={parseQuick.isPending}
+          error={parseQuick.error}
+        />
+        <View style={{ height: theme.spacing.xl }} />
+      </BottomSheet>
+    );
+  }
+
+  if (step === 'preview' && proposal) {
+    return (
+      <BottomSheet
+        visible={open}
+        onClose={() => setStep('form')}
+        title={STEP_TITLE.preview}
+        maxHeightRatio={SHEET_HEIGHT_RATIO}
+      >
+        <ProposalPreview
+          proposal={proposal}
+          accountName={
+            accounts.find((entry) => entry.id === proposal.accountId)?.name ??
+            proposal.accountName ??
+            undefined
+          }
+          methodLabel={PAYMENT_METHOD_LABEL[proposal.paymentMethod]}
+          saving={createMutation.isPending}
+          onSave={() => void saveProposal()}
+          onEdit={() => {
+            applyProposal(proposal);
+            tapFeedback();
+            setStep('form');
+          }}
+        />
+        <View style={{ height: theme.spacing.xl }} />
+      </BottomSheet>
+    );
+  }
+
+  // ------------------------------------------------------------ the bill
+  if (step === 'receipt') {
+    return (
+      <BottomSheet
+        visible={open}
+        onClose={() => setStep('form')}
+        title={STEP_TITLE.receipt}
+        maxHeightRatio={SHEET_HEIGHT_RATIO}
+      >
+        <ReceiptPanel
+          receipt={receipt}
+          progress={uploadProgress}
+          uploading={uploadReceipt.isPending || uploadProgress !== null}
+          reading={extractReceipt.isPending}
+          canRead={receiptStatus.data?.reading ?? false}
+          error={uploadReceipt.error ?? extractReceipt.error}
+          onPickCamera={() => void pickImage('camera')}
+          onPickLibrary={() => void pickImage('library')}
+          onApply={applyReceipt}
+          onDiscard={discardReceipt}
+        />
+        <View style={{ height: theme.spacing.xl }} />
+      </BottomSheet>
+    );
+  }
 
   if (step !== 'form') {
     return (
@@ -355,6 +659,37 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
       onClose={handleClose}
       title={editing ? 'Edit transaction' : 'New transaction'}
       maxHeightRatio={SHEET_HEIGHT_RATIO}
+      headerAction={
+        editing ? undefined : (
+          <>
+            <IconButton
+              name="sparkles"
+              onPress={() => {
+                tapFeedback();
+                parseQuick.reset();
+                setStep('quick');
+              }}
+              accessibilityLabel="Type it out instead"
+              accessibilityHint="Reads a line like Petrol 1200 into a transaction"
+              variant="tonal"
+              size="sm"
+            />
+            {receiptStatus.data?.storage ? (
+              <IconButton
+                name="camera"
+                onPress={() => {
+                  tapFeedback();
+                  setStep('receipt');
+                }}
+                accessibilityLabel="Scan a bill"
+                accessibilityHint="Photograph a receipt and read the amount from it"
+                variant="tonal"
+                size="sm"
+              />
+            ) : null}
+          </>
+        )
+      }
       footer={
         <View style={{ gap: theme.spacing.sm }}>
           {error ? (
@@ -548,6 +883,36 @@ function EntrySheet({ sheet }: { sheet: EntrySheetState }) {
           </Text>
         </Pressable>
       )}
+
+      {/* A receipt attached but not yet saved. Shown on the form rather than
+          left behind on a panel nobody returns to, because an image the user
+          cannot see is an image they will assume was lost. */}
+      {receipt ? (
+        <Pressable
+          onPress={() => {
+            tapFeedback();
+            setStep('receipt');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Receipt attached. Opens the bill."
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.sm,
+            marginTop: theme.spacing.md,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            borderRadius: theme.radius.sm,
+            backgroundColor: pressed ? theme.colors.surfaceStrong : theme.colors.surfaceMuted,
+          })}
+        >
+          <Icon name="scan" size={15} color={theme.colors.brandText} />
+          <Text variant="caption" tone="secondary" style={{ flex: 1 }} numberOfLines={1}>
+            Receipt attached
+          </Text>
+          <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
+        </Pressable>
+      ) : null}
 
       <Keypad
         onKey={handleKey}

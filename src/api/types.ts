@@ -201,6 +201,16 @@ export const PAYMENT_METHODS: readonly PaymentMethod[] = [
   'other',
 ];
 
+/**
+ * Narrows a string off the wire to a payment method.
+ *
+ * Needed wherever a value arrives that the type system cannot vouch for — a
+ * receipt extraction, for instance, where the method was read off a photograph.
+ */
+export function isPaymentMethod(value: string | null | undefined): value is PaymentMethod {
+  return typeof value === 'string' && (PAYMENT_METHODS as readonly string[]).includes(value);
+}
+
 export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   bank: 'Bank account',
   savings: 'Savings',
@@ -544,4 +554,117 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
   'Show my biggest expenses.',
   'Why did I spend more this month?',
   'How am I doing against my budgets?',
+];
+
+
+// ------------------------------------------------------------------- step 5
+
+/**
+ * What the quick-entry line was read as.
+ *
+ * Every field is a proposal. The amount, date and payment method were found by
+ * rule on the server; only the category was inferred, and `categorySource` says
+ * by what. Nothing is written until the preview is confirmed.
+ */
+export type QuickEntryProposal = {
+  /** Null when no amount could be read. Save must stay disabled. */
+  amount: number | null;
+  merchant: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categorySource: 'memory' | 'merchant' | 'model' | 'none';
+  categoryReason: string;
+  accountId: string | null;
+  accountName: string | null;
+  paymentMethod: PaymentMethod;
+  date: string;
+  confidence: 'high' | 'medium' | 'low';
+  /** What it was unsure about, in words the preview can show. */
+  warnings: string[];
+  matched: { amount: string | null; date: string | null; method: string | null };
+};
+
+export type MerchantMemory = {
+  categoryId: string;
+  categoryName: string;
+  count: number;
+  merchantLabel: string;
+};
+
+export type MerchantSuggestion = {
+  merchant: string;
+  categoryId: string;
+  categoryName: string;
+};
+
+export type ReceiptStatus = {
+  /** False when Cloudinary is not configured — the camera button stays hidden. */
+  storage: boolean;
+  /** False when no vision model is available — upload still works, reading does not. */
+  reading: boolean;
+  maxBytes: number;
+};
+
+/** A signed permission to upload one image, straight from the phone. */
+export type UploadTicket = {
+  cloudName: string;
+  apiKey: string;
+  uploadUrl: string;
+  params: Record<string, string>;
+  signature: string;
+  maxBytes: number;
+};
+
+/** Cloudinary's reply, passed to our API which verifies it before storing. */
+export type UploadedImage = {
+  publicId: string;
+  version: number;
+  signature: string;
+  secureUrl: string;
+  bytes: number;
+  format: string;
+  width: number;
+  height: number;
+};
+
+export type ReceiptExtraction = {
+  merchant: string;
+  amount: number | null;
+  /** The printed line the total was read from, so a person can check it. */
+  amountText: string;
+  date: string | null;
+  items: { name: string; amount: number | null }[];
+  paymentMethod: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  extractedAt: string | null;
+};
+
+export type Receipt = {
+  id: string;
+  transactionId: string | null;
+  url: string;
+  thumbnailUrl: string;
+  bytes: number;
+  format: string;
+  width: number;
+  height: number;
+  uploadedAt: string;
+  /** Null until the image has been read. Never applied without confirmation. */
+  extraction: ReceiptExtraction | null;
+};
+
+/**
+ * The examples under the quick-entry field.
+ *
+ * Deliberately the shapes the parser is best at, and deliberately Indian: the
+ * point of an example is to teach the grammar in one glance, and "Petrol 1200"
+ * teaches it faster than any help text.
+ */
+export const QUICK_ENTRY_EXAMPLES: readonly string[] = [
+  'Petrol 1200',
+  'Zomato 450',
+  'DMart 2380',
+  'Netflix 649',
+  'Chai 40 cash',
+  'Uber 260 yesterday',
 ];

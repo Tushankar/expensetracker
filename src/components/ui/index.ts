@@ -29,4 +29,5 @@ export {
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Skeleton, SkeletonRow, SkeletonText, type SkeletonProps } from './Skeleton';
 export { Text, type TextProps, type TextTone } from './Text';
+export { Toast, type ToastProps, type ToastTone } from './Toast';
 export { usePressAnimation } from './usePressAnimation';

@@ -1,4 +1,5 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
 
@@ -6,11 +7,16 @@ import {
   errorMessage,
   useAccountMap,
   useCategoryMap,
+  useDeleteReceipt,
   useDeleteTransaction,
+  useReceiptStatus,
+  useReceipts,
   useTransaction,
+  useUploadReceipt,
   PAYMENT_METHOD_LABEL,
 } from '@/api';
 import { QueryState } from '@/components/data/QueryState';
+import { ReceiptCard } from '@/components/entry';
 import { toIconName } from '@/components/icons/registry';
 import {
   Badge,
@@ -29,7 +35,7 @@ import { useUiStore } from '@/store/uiStore';
 import { categoryColor, useTheme } from '@/theme';
 import { formatINR } from '@/utils/currency';
 import { formatDayLabel, formatTime } from '@/utils/date';
-import { errorFeedback, successFeedback } from '@/utils/haptics';
+import { errorFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
 
 /**
  * One transaction, in full.
@@ -43,6 +49,56 @@ export function TransactionDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'TransactionDetail'>>();
   const openEditSheet = useUiStore((state) => state.openEditSheet);
+
+  const receiptStatus = useReceiptStatus();
+  const receiptsQuery = useReceipts(route.params.id);
+  const uploadReceipt = useUploadReceipt();
+  const removeReceipt = useDeleteReceipt();
+
+  const receipt = receiptsQuery.data?.[0] ?? null;
+
+  /**
+   * Attaches a bill to a transaction that already exists.
+   *
+   * The counterpart to the entry sheet's flow, and the reason a receipt carries a
+   * nullable `transactionId`: people photograph the bill at the counter and file
+   * it later just as often as they do it the other way round.
+   */
+  async function attachReceipt() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Photo access is off', 'Paisa needs it to attach a bill.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.7 });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset) return;
+
+    try {
+      await uploadReceipt.mutateAsync({
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        transactionId: route.params.id,
+      });
+      successFeedback();
+    } catch {
+      errorFeedback();
+    }
+  }
+
+  function confirmRemoveReceipt() {
+    if (!receipt) return;
+    tapFeedback();
+    Alert.alert('Remove this receipt?', 'The image is deleted. The transaction stays.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => removeReceipt.mutate(receipt.id),
+      },
+    ]);
+  }
 
   const [deleteError, setDeleteError] = useState<string | undefined>();
 
@@ -247,6 +303,15 @@ export function TransactionDetailScreen() {
                 ) : null}
               </View>
             </Card>
+
+            <ReceiptCard
+              receipt={receipt}
+              loading={receiptsQuery.isLoading}
+              available={receiptStatus.data?.storage ?? false}
+              busy={uploadReceipt.isPending || removeReceipt.isPending}
+              onAttach={() => void attachReceipt()}
+              onRemove={confirmRemoveReceipt}
+            />
 
             {deleteError ? (
               <View

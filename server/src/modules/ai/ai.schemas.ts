@@ -30,6 +30,20 @@ export const askSchema = aiPeriodSchema.safeExtend({
   question: z.string().trim().min(2, 'Ask a question').max(400),
 });
 
+/**
+ * One line of typed shorthand.
+ *
+ * Capped well below the question limit: this is "Petrol 1200", not a paragraph.
+ * Anything longer is a note that wandered into the wrong field, and parsing it
+ * would produce a confident reading of nothing in particular.
+ */
+export const quickParseSchema = z.object({
+  text: z.string().trim().min(1, 'Type something like: Petrol 1200').max(160),
+  type: z.enum(['expense', 'income']).default('expense'),
+});
+
+export type QuickParseInput = z.infer<typeof quickParseSchema>;
+
 export const categoriseSchema = z.object({
   merchant: z.string().trim().min(1, 'Give a merchant or description').max(120),
   description: z.string().trim().max(200).optional(),
