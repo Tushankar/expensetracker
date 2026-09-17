@@ -4,7 +4,13 @@ export const NOTIFICATION_TYPES = [
   'budget_warning',
   'budget_exceeded',
   'recurring_upcoming',
+  'recurring_due',
   'recurring_created',
+  'money_owed_due',
+  'repayment_due',
+  'unusual_spending',
+  'monthly_summary',
+  'system',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -30,12 +36,16 @@ const notificationSchema = new Schema(
     body: { type: String, required: true, maxlength: 300 },
     /**
      * What the row points at, so tapping it can open the right screen:
-     * `{ budgetId, categoryId, recurringId, transactionId, month }`.
+     * `{ budgetId, categoryId, recurringId, transactionId, personId, obligationId, month, screen }`.
      */
     data: { type: Schema.Types.Mixed, default: {} },
+    metadata: { type: Schema.Types.Mixed, default: {} },
     /** See the note above — this is the anti-spam mechanism. */
     dedupeKey: { type: String, required: true },
     readAt: { type: Date, default: null },
+    delivered: { type: Boolean, default: false },
+    scheduledFor: { type: Date, default: () => new Date() },
+    expiresAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

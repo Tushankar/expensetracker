@@ -94,6 +94,8 @@ export const listTransactionsSchema = z
     paymentMethod: z.enum(PAYMENT_METHODS).optional(),
     /** Free text over merchant and description. */
     q: z.string().trim().max(120).optional(),
+    search: z.string().trim().max(120).optional(),
+    merchant: z.string().trim().max(120).optional(),
     from: isoDate.optional(),
     to: isoDate.optional(),
     minAmount: z.coerce.number().int().nonnegative().optional(),
@@ -111,6 +113,10 @@ export const listTransactionsSchema = z
       value.minAmount <= value.maxAmount,
     { message: 'The minimum must be below the maximum', path: ['minAmount'] },
   );
+
+export const searchParseSchema = z.object({
+  query: z.string().trim().min(1, 'Search query cannot be empty').max(200, 'Search query too long'),
+});
 
 export const summarySchema = z.object({
   from: isoDate.optional(),
@@ -159,3 +165,4 @@ export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>;
 export type SummaryQuery = z.infer<typeof summarySchema>;
 export type ExportQuery = z.infer<typeof exportSchema>;
 export type DailyQuery = z.infer<typeof dailySchema>;
+export type SearchParseInput = z.infer<typeof searchParseSchema>;

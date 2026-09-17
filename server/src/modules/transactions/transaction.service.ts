@@ -1,6 +1,7 @@
 import { Types, type ClientSession, type FilterQuery } from 'mongoose';
 
 import { ApiError } from '../../lib/ApiError';
+import { logger } from '../../config/logger';
 import { pageMeta, type PageMeta } from '../../lib/pagination';
 import { withTransaction } from '../../lib/session';
 import { zoneOrDefault } from '../../lib/time';
@@ -9,6 +10,8 @@ import { evaluateBudgets } from '../budgets/budget.service';
 import { rememberMerchant } from '../merchants/merchant.service';
 import { detachFromTransaction } from '../receipts/receipt.service';
 import { requireOwnedCategory } from '../categories/category.service';
+import { MoneyOwedModel } from '../moneyOwed/moneyOwed.model';
+import { RepaymentModel } from '../moneyOwed/repayment.model';
 import { UserModel } from '../users/user.model';
 
 import {
@@ -323,6 +326,29 @@ export async function updateTransaction(
     transaction.destinationAccountId = refs.destinationAccountId;
     transaction.categoryId = refs.categoryId;
 
+    // Duplicate check on update (Section 31): warn if updating makes this identical to another
+    // transaction within 5 minutes. Do NOT compare against itself (_id !== transaction._id).
+    if (transaction.merchant && transaction.amount) {
+      const fiveMins = 5 * 60 * 1000;
+      const windowStart = new Date(transaction.date.getTime() - fiveMins);
+      const windowEnd = new Date(transaction.date.getTime() + fiveMins);
+      const dup = await TransactionModel.findOne({
+        _id: { $ne: transaction._id },
+        userId: new Types.ObjectId(userId),
+        type,
+        amount: transaction.amount,
+        merchant: new RegExp(`^${transaction.merchant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+        date: { $gte: windowStart, $lte: windowEnd },
+      }).session(session ?? null);
+
+      if (dup) {
+        logger.info(
+          { originalId: String(transaction._id), duplicateId: String(dup._id) },
+          'Possible duplicate transaction detected during update',
+        );
+      }
+    }
+
     await transaction.save({ session });
 
     await applyEffects([...before, ...balanceEffects(transaction)], session);
@@ -344,10 +370,22 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(userId: string, transactionId: string): Promise<void> {
+  const userObjectId = new Types.ObjectId(userId);
+  // Safety check: Cannot delete active obligations or repayments through normal transaction endpoint (B.5 protection)
+  const [obligationExists, repaymentExists] = await Promise.all([
+    MoneyOwedModel.exists({ _id: transactionId, userId: userObjectId }),
+    RepaymentModel.exists({ _id: transactionId, userId: userObjectId }),
+  ]);
+  if (obligationExists || repaymentExists) {
+    throw ApiError.badRequest(
+      'Active obligations and repayments must be settled or written off through People & Money Owed.',
+    );
+  }
+
   await withTransaction(async (session) => {
     const transaction = await TransactionModel.findOne({
       _id: transactionId,
-      userId: new Types.ObjectId(userId),
+      userId: userObjectId,
     }).session(session ?? null);
 
     if (!transaction) throw ApiError.notFound('Transaction not found', { transactionId });
@@ -396,19 +434,26 @@ function buildFilter(userId: string, query: ListTransactionsQuery): FilterQuery<
     };
   }
 
-  if (query.q) {
+  if (query.merchant) {
+    const pattern = new RegExp(query.merchant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.merchant = pattern;
+  }
+
+  const searchText = query.search || query.q;
+  if (searchText) {
     // Case-insensitive substring rather than the text index: people search for
     // "swig" and expect Swiggy, which a stemmed word-boundary search does not give
     // them. Escaped so a stray "(" in the box is a search, not a 500.
-    const pattern = new RegExp(query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const pattern = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const search = [{ merchant: pattern }, { description: pattern }];
     filter.$and = [...(filter.$and ?? []), { $or: search }];
-    if (filter.$or) {
-      // Two independent $or clauses cannot both live at the top level, so the
-      // account filter moves into $and beside the search.
-      filter.$and.push({ $or: filter.$or });
-      delete filter.$or;
-    }
+  }
+
+  if (filter.$or && filter.$and) {
+    // Two independent $or clauses cannot both live at the top level, so the
+    // account filter moves into $and beside the search.
+    filter.$and.push({ $or: filter.$or });
+    delete filter.$or;
   }
 
   return filter;
@@ -423,30 +468,49 @@ const SORTS: Record<string, Record<string, 1 | -1>> = {
   '-createdAt': { createdAt: -1, _id: -1 },
 };
 
+export type FilteredSummary = {
+  count: number;
+  totalExpense: number;
+  totalIncome: number;
+};
+
 export async function listTransactions(
   userId: string,
   query: ListTransactionsQuery,
-): Promise<{ transactions: PublicTransaction[]; meta: PageMeta }> {
+): Promise<{ transactions: PublicTransaction[]; meta: PageMeta; summary: FilteredSummary }> {
   const filter = buildFilter(userId, query);
   // `_id` is the tie-break on every sort. Without it two transactions on the same
   // date can swap places between page 1 and page 2, and a row is shown twice or
   // never — the classic infinite-scroll duplicate.
   const sort = SORTS[query.sort] ?? SORTS['-date']!;
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, summaryAgg] = await Promise.all([
     TransactionModel.find(filter)
       .sort(sort)
       .skip((query.page - 1) * query.limit)
       .limit(query.limit)
       .lean(),
     TransactionModel.countDocuments(filter),
+    TransactionModel.aggregate<{ _id: string; total: number }>([
+      { $match: filter },
+      { $group: { _id: '$type', total: { $sum: '$amount' } } },
+    ]),
   ]);
+
+  const expenseRow = summaryAgg.find((s) => s._id === 'expense');
+  const incomeRow = summaryAgg.find((s) => s._id === 'income');
 
   return {
     transactions: rows.map(toPublicTransaction),
     meta: pageMeta(query.page, query.limit, total),
+    summary: {
+      count: total,
+      totalExpense: expenseRow?.total ?? 0,
+      totalIncome: incomeRow?.total ?? 0,
+    },
   };
 }
+
 
 export type Summary = {
   from: string | null;

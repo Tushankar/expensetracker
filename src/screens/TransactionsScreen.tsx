@@ -1,14 +1,16 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, View } from 'react-native';
 
 import {
   useAccountMap,
   useCategoryMap,
   useDailySpend,
+  useParseSearchQuery,
   useSummary,
   useTransactionList,
+  type SearchProposalResult,
   type Transaction,
   type TransactionFilters,
 } from '@/api';
@@ -22,6 +24,8 @@ import {
 } from '@/components/transactions';
 import {
   Badge,
+  Button,
+  Card,
   ChipRow,
   IconButton,
   Input,
@@ -32,6 +36,7 @@ import {
   SkeletonRow,
   Text,
 } from '@/components/ui';
+import { formatINR } from '@/utils/currency';
 import { DateRangeSheet } from '@/screens/sheets/DateRangeSheet';
 import { FiltersSheet } from '@/screens/sheets/FiltersSheet';
 import { useUiStore } from '@/store/uiStore';
@@ -92,6 +97,9 @@ export function TransactionsScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersSession, setFiltersSession] = useState(0);
 
+  const [nlProposal, setNlProposal] = useState<SearchProposalResult | null>(null);
+  const parseSearch = useParseSearchQuery();
+
   function openFilters() {
     setFiltersSession((current) => current + 1);
     setFiltersOpen(true);
@@ -101,6 +109,38 @@ export function TransactionsScreen() {
     const timer = setTimeout(() => setDebounced(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Natural language query interpretation
+  useEffect(() => {
+    if (debounced.length > 3) {
+      parseSearch.mutate(debounced, {
+        onSuccess(data) {
+          if (data && (data.requiresConfirmation || data.confidence === 'high')) {
+            setNlProposal(data);
+          } else {
+            setNlProposal(null);
+          }
+        },
+        onError() {
+          setNlProposal(null);
+        },
+      });
+    } else {
+      setNlProposal(null);
+    }
+  }, [debounced]);
+
+  function applyProposal() {
+    if (!nlProposal) return;
+    setFilters((prev) => ({
+      ...prev,
+      ...nlProposal.filters,
+    }));
+    if (nlProposal.filters.type) {
+      setKind(nlProposal.filters.type);
+    }
+    setNlProposal(null);
+  }
 
   const range = useMemo(() => periodRange(selection), [selection]);
 
@@ -128,6 +168,7 @@ export function TransactionsScreen() {
     () => ({
       ...(kind === 'all' ? {} : { type: kind }),
       ...(debounced ? { q: debounced } : {}),
+      ...(filters.merchant ? { merchant: filters.merchant } : {}),
       ...(filters.accountId ? { accountId: filters.accountId } : {}),
       ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
       ...(filters.paymentMethod ? { paymentMethod: filters.paymentMethod } : {}),
@@ -166,6 +207,7 @@ export function TransactionsScreen() {
     : null;
 
   const activeFilterCount =
+    (filters.merchant ? 1 : 0) +
     (filters.accountId ? 1 : 0) +
     (filters.categoryId ? 1 : 0) +
     (filters.paymentMethod ? 1 : 0) +
@@ -173,6 +215,85 @@ export function TransactionsScreen() {
     (filters.sort && filters.sort !== '-date' ? 1 : 0);
 
   const filtered = Boolean(debounced) || activeFilterCount > 0 || kind !== 'all';
+
+  const activeChips = useMemo(() => {
+    const chips: { id: string; label: string; onRemove: () => void }[] = [];
+
+    if (debounced) {
+      chips.push({
+        id: 'search',
+        label: `"${debounced}"`,
+        onRemove: () => {
+          setSearch('');
+          setDebounced('');
+        },
+      });
+    }
+
+    if (kind !== 'all') {
+      chips.push({
+        id: 'kind',
+        label: `Type: ${kind.charAt(0).toUpperCase() + kind.slice(1)}`,
+        onRemove: () => setKind('all'),
+      });
+    }
+
+    if (filters.merchant) {
+      chips.push({
+        id: 'merchant',
+        label: `Merchant: ${filters.merchant}`,
+        onRemove: () => setFilters((f) => ({ ...f, merchant: undefined })),
+      });
+    }
+
+    if (filters.accountId) {
+      const acc = accounts.get(filters.accountId);
+      chips.push({
+        id: 'account',
+        label: acc?.name ?? 'Account',
+        onRemove: () => setFilters((f) => ({ ...f, accountId: undefined })),
+      });
+    }
+
+    if (filters.categoryId) {
+      const cat = categories.get(filters.categoryId);
+      chips.push({
+        id: 'category',
+        label: cat?.name ?? 'Category',
+        onRemove: () => setFilters((f) => ({ ...f, categoryId: undefined })),
+      });
+    }
+
+    if (filters.paymentMethod) {
+      chips.push({
+        id: 'method',
+        label: filters.paymentMethod.replace('_', ' ').toUpperCase(),
+        onRemove: () => setFilters((f) => ({ ...f, paymentMethod: undefined })),
+      });
+    }
+
+    if (filters.minAmount !== undefined && filters.maxAmount !== undefined) {
+      chips.push({
+        id: 'amount',
+        label: `${formatINR(filters.minAmount)} – ${formatINR(filters.maxAmount)}`,
+        onRemove: () => setFilters((f) => ({ ...f, minAmount: undefined, maxAmount: undefined })),
+      });
+    } else if (filters.minAmount !== undefined) {
+      chips.push({
+        id: 'minAmount',
+        label: `> ${formatINR(filters.minAmount)}`,
+        onRemove: () => setFilters((f) => ({ ...f, minAmount: undefined })),
+      });
+    } else if (filters.maxAmount !== undefined) {
+      chips.push({
+        id: 'maxAmount',
+        label: `< ${formatINR(filters.maxAmount)}`,
+        onRemove: () => setFilters((f) => ({ ...f, maxAmount: undefined })),
+      });
+    }
+
+    return chips;
+  }, [debounced, kind, filters, accounts, categories]);
 
   const refresh = useCallback(() => {
     void list.refetch();
@@ -328,9 +449,109 @@ export function TransactionsScreen() {
           onChange={setKind}
           size="sm"
           accessibilityLabel="Filter by type"
-          style={{ marginBottom: theme.spacing.lg }}
+          style={{ marginBottom: theme.spacing.md }}
         />
       )}
+
+      {/* Active Filter Chips */}
+      {activeChips.length > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: theme.spacing.xs,
+            marginBottom: theme.spacing.md,
+          }}
+        >
+          {activeChips.map((chip) => (
+            <Pressable
+              key={chip.id}
+              onPress={chip.onRemove}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove filter ${chip.label}`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: theme.colors.surfaceMuted,
+                paddingHorizontal: theme.spacing.sm,
+                paddingVertical: 5,
+                borderRadius: theme.radius.pill,
+              }}
+            >
+              <Text variant="caption" tone="primary">
+                {chip.label}
+              </Text>
+              <Text variant="caption" tone="tertiary" style={{ fontWeight: '700' }}>
+                ✕
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={clearEverything}
+            accessibilityRole="button"
+            accessibilityLabel="Clear all filters"
+            style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: 5 }}
+          >
+            <Text variant="caption" tone="brand" style={{ fontWeight: '600' }}>
+              Clear all
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Ambiguous Natural Language Confirmation (Section 15) */}
+      {nlProposal && nlProposal.requiresConfirmation ? (
+        <Card
+          radius="lg"
+          padding="md"
+          style={{
+            marginBottom: theme.spacing.md,
+            backgroundColor: theme.colors.surfaceMuted,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+          }}
+        >
+          <Text variant="caption" tone="secondary">
+            You searched "{debounced}". Paisa understood:
+          </Text>
+          <Text variant="labelSm" style={{ marginTop: 2, marginBottom: theme.spacing.sm }}>
+            {nlProposal.displaySummary}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+            <Button label="Show results" size="sm" variant="primary" onPress={applyProposal} />
+            <Button
+              label="Dismiss"
+              size="sm"
+              variant="secondary"
+              onPress={() => setNlProposal(null)}
+            />
+          </View>
+        </Card>
+      ) : null}
+
+      {/* Filtered Result Summary (Section 32) */}
+      {filtered && list.summary && list.summary.count > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: theme.spacing.xs,
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          <Text variant="caption" tone="secondary">
+            {list.summary.count} {list.summary.count === 1 ? 'transaction' : 'transactions'}
+          </Text>
+          {list.summary.totalExpense > 0 ? (
+            <Text variant="labelSm" tone="primary">
+              {formatINR(list.summary.totalExpense)} spent
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* The day headings below are sticky and carry their own top padding, so
           this block stops short of a full gap — `xxl` here stacked on the

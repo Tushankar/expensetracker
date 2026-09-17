@@ -1,6 +1,6 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import {
@@ -9,6 +9,7 @@ import {
   useCategoryMap,
   useDeleteReceipt,
   useDeleteTransaction,
+  useMoneyOwedList,
   useReceiptStatus,
   useReceipts,
   useTransaction,
@@ -117,16 +118,33 @@ export function TransactionDetailScreen() {
   const isTransfer = transaction?.type === 'transfer';
   const isIncome = transaction?.type === 'income';
 
+  const obligationsQuery = useMoneyOwedList();
+  const relatedObligation = useMemo(() => {
+    if (!transaction || !obligationsQuery.data) return null;
+    const desc = (transaction.description || '').toLowerCase();
+    const merch = (transaction.merchant || '').toLowerCase();
+    return (
+      obligationsQuery.data.find((o) => {
+        const pName = (o.personName || '').toLowerCase();
+        return (
+          (pName && (desc.includes(pName) || merch.includes(pName))) ||
+          (o.purpose && (desc.includes(o.purpose.toLowerCase()) || merch.includes(o.purpose.toLowerCase())))
+        );
+      }) ?? null
+    );
+  }, [transaction, obligationsQuery.data]);
+
   function confirmDelete() {
     if (!transaction) return;
 
+    const titleText = transaction.merchant || (isTransfer ? 'Transfer' : (category?.name ?? 'Transaction'));
+    const amountText = formatINR(transaction.amount);
+
     Alert.alert(
-      'Delete this transaction?',
-      isTransfer
-        ? 'Both account balances will be put back the way they were.'
-        : 'The account balance will be put back the way it was.',
+      'Delete transaction?',
+      `${amountText}\n${titleText}\n\nThis transaction will be removed from your records.`,
       [
-        { text: 'Keep it', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -303,6 +321,23 @@ export function TransactionDetailScreen() {
                 ) : null}
               </View>
             </Card>
+
+            {relatedObligation ? (
+              <Card radius="xl" padding="lg" style={{ marginTop: theme.spacing.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+                  <IconTile name="users" color={theme.colors.brand} size="sm" />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="labelSm">People & Money Owed</Text>
+                    <Text variant="bodySm" tone="secondary">
+                      {relatedObligation.direction === 'owed_to_me'
+                        ? `${relatedObligation.personName} owes you ${formatINR(relatedObligation.remainingAmount)}`
+                        : `You owe ${relatedObligation.personName} ${formatINR(relatedObligation.remainingAmount)}`}
+                      {relatedObligation.type === 'split' ? ' · Split share' : ''}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            ) : null}
 
             <ReceiptCard
               receipt={receipt}

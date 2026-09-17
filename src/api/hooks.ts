@@ -279,7 +279,18 @@ export function useTransactionList(filters: TransactionFilters = {}) {
     [query.data],
   );
 
-  return { ...query, transactions, total: query.data?.pages[0]?.meta.total ?? 0 };
+  return {
+    ...query,
+    transactions,
+    total: query.data?.pages[0]?.meta.total ?? 0,
+    summary: query.data?.pages[0]?.summary,
+  };
+}
+
+export function useParseSearchQuery() {
+  return useMutation({
+    mutationFn: (query: string) => transactionApi.searchParse(query),
+  });
 }
 
 export function useTransaction(id: string | undefined) {

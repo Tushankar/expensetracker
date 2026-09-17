@@ -16,6 +16,8 @@ import { receiptRouter } from '../modules/receipts/receipt.routes';
 import { recurringRouter } from '../modules/recurring/recurring.routes';
 import { transactionRouter } from '../modules/transactions/transaction.routes';
 import { userRouter } from '../modules/users/user.routes';
+import { deviceRouter } from '../modules/notifications/device.routes';
+import { notificationPreferencesRouter } from '../modules/notifications/preferences.routes';
 
 /**
  * Everything is mounted under `/api/v1`. The version is in the path rather than a
@@ -47,6 +49,8 @@ v1Router.use('/transactions', transactionRouter);
 v1Router.use('/budgets', budgetRouter);
 v1Router.use('/recurring', recurringRouter);
 v1Router.use('/notifications', notificationRouter);
+v1Router.use('/notification-preferences', notificationPreferencesRouter);
+v1Router.use('/devices', deviceRouter);
 v1Router.use('/merchants', merchantRouter);
 v1Router.use('/receipts', receiptRouter);
 v1Router.use('/analytics', analyticsRouter);

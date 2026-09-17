@@ -10,11 +10,13 @@ import type {
   AppNotification,
   CategorySuggestion,
   DeletionSummary,
+  FilteredSummary,
   MerchantMemory,
   MerchantSuggestion,
   QuickEntryProposal,
   Receipt,
   ReceiptStatus,
+  SearchProposalResult,
   TransactionExport,
   UploadTicket,
   UploadedImage,
@@ -163,8 +165,8 @@ export const transactionApi = {
   async list(
     filters: TransactionFilters = {},
     signal?: AbortSignal,
-  ): Promise<{ transactions: Transaction[]; meta: PageMeta }> {
-    const result = await request<{ transactions: Transaction[] }>('/transactions', {
+  ): Promise<{ transactions: Transaction[]; meta: PageMeta; summary?: FilteredSummary }> {
+    const result = await request<{ transactions: Transaction[]; summary?: FilteredSummary }>('/transactions', {
       params: filters as Record<string, string | number | undefined>,
       signal,
     });
@@ -177,7 +179,15 @@ export const transactionApi = {
         totalPages: 1,
         hasMore: false,
       }) as PageMeta,
+      summary: result.data.summary,
     };
+  },
+
+  searchParse(query: string) {
+    return requestData<{ proposal: SearchProposalResult }>('/transactions/search-parse', {
+      method: 'POST',
+      body: { query },
+    }).then((data) => data.proposal);
   },
 
   get(id: string) {

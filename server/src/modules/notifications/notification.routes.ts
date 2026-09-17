@@ -9,37 +9,34 @@ import { validate, validatedQuery } from '../../middleware/validate';
 import {
   clearAll,
   countUnread,
+  getNotificationPreferences,
   listNotifications,
   markAllRead,
   markRead,
   registerDevice,
   unregisterDevice,
+  updateNotificationPreferences,
 } from './notification.service';
+import {
+  listNotificationsQuerySchema,
+  registerDeviceSchema,
+  unregisterDeviceSchema,
+  updateNotificationPreferencesSchema,
+} from './notification.schemas';
+import { runAllAlertsForUser } from './alertEngine';
 
 export const notificationRouter: Router = Router();
 
 notificationRouter.use(requireAuth);
 
-const listSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(50).default(25),
-  unreadOnly: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
-});
-
-notificationRouter.get('/', validate({ query: listSchema }), async (req, res) => {
-  const query = validatedQuery<z.infer<typeof listSchema>>(res);
+notificationRouter.get('/', validate({ query: listNotificationsQuerySchema }), async (req, res) => {
+  const query = validatedQuery<z.infer<typeof listNotificationsQuerySchema>>(res);
   const { notifications, meta, unread } = await listNotifications(currentUser(req).id, query);
   ok(res, { notifications, unread }, meta);
 });
 
 /**
  * Just the badge number.
- *
- * Separate from the list because the app polls this on focus and the list is
- * pages of rows nobody is looking at — a count is one indexed `countDocuments`.
  */
 notificationRouter.get('/unread-count', async (req, res) => {
   ok(res, { unread: await countUnread(currentUser(req).id) });
@@ -48,6 +45,15 @@ notificationRouter.get('/unread-count', async (req, res) => {
 notificationRouter.post('/read-all', async (req, res) => {
   ok(res, { updated: await markAllRead(currentUser(req).id) });
 });
+
+// Support both PATCH and POST for marking read
+notificationRouter.patch(
+  '/:id/read',
+  validate({ params: z.object({ id: objectId }) }),
+  async (req, res) => {
+    ok(res, { notification: await markRead(currentUser(req).id, String(req.params.id)) });
+  },
+);
 
 notificationRouter.post(
   '/:id/read',
@@ -61,23 +67,39 @@ notificationRouter.delete('/', async (req, res) => {
   ok(res, { deleted: await clearAll(currentUser(req).id) });
 });
 
-/**
- * Device registration for push.
- *
- * The token is stored now so that turning push on later is a change inside
- * `deliver()` and nothing else — the client already has somewhere to hand its
- * token to, and the server already knows which devices belong to whom.
- */
-const deviceSchema = z.object({ token: z.string().trim().min(10).max(256) });
+// Preferences
+notificationRouter.get('/preferences', async (req, res) => {
+  const preferences = await getNotificationPreferences(currentUser(req).id);
+  ok(res, { preferences });
+});
 
-notificationRouter.post('/device', validate({ body: deviceSchema }), async (req, res) => {
-  const { token } = req.body as z.infer<typeof deviceSchema>;
-  await registerDevice(currentUser(req).id, token);
+notificationRouter.patch(
+  '/preferences',
+  validate({ body: updateNotificationPreferencesSchema }),
+  async (req, res) => {
+    const preferences = await updateNotificationPreferences(
+      currentUser(req).id,
+      req.body as z.infer<typeof updateNotificationPreferencesSchema>,
+    );
+    ok(res, { preferences });
+  },
+);
+
+// Device registration
+notificationRouter.post('/device', validate({ body: registerDeviceSchema }), async (req, res) => {
+  const body = req.body as z.infer<typeof registerDeviceSchema>;
+  const result = await registerDevice(currentUser(req).id, body.token, body.platform, body.deviceId);
+  ok(res, result);
+});
+
+notificationRouter.delete('/device', validate({ body: unregisterDeviceSchema }), async (req, res) => {
+  const { token } = req.body as z.infer<typeof unregisterDeviceSchema>;
+  await unregisterDevice(currentUser(req).id, token);
   noContent(res);
 });
 
-notificationRouter.delete('/device', validate({ body: deviceSchema }), async (req, res) => {
-  const { token } = req.body as z.infer<typeof deviceSchema>;
-  await unregisterDevice(currentUser(req).id, token);
-  noContent(res);
+// Test / On-demand trigger for running alerts
+notificationRouter.post('/run-alerts', async (req, res) => {
+  const result = await runAllAlertsForUser(currentUser(req).id);
+  ok(res, { result });
 });

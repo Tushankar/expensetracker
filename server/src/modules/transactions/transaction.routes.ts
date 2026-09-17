@@ -9,6 +9,7 @@ import {
   listTransactionsSchema,
   dailySchema,
   exportSchema,
+  searchParseSchema,
   summarySchema,
   transactionIdParam,
   updateTransactionSchema,
@@ -16,10 +17,12 @@ import {
   type DailyQuery,
   type ListTransactionsQuery,
   type ExportQuery,
+  type SearchParseInput,
   type SummaryQuery,
   type UpdateTransactionInput,
 } from './transaction.schemas';
 import { exportTransactions } from './export.service';
+import { parseNaturalLanguageSearch } from './searchParser';
 import {
   createTransaction,
   deleteTransaction,
@@ -36,9 +39,19 @@ transactionRouter.use(requireAuth);
 
 transactionRouter.get('/', validate({ query: listTransactionsSchema }), async (req, res) => {
   const query = validatedQuery<ListTransactionsQuery>(res);
-  const { transactions, meta } = await listTransactions(currentUser(req).id, query);
-  ok(res, { transactions }, meta);
+  const { transactions, meta, summary } = await listTransactions(currentUser(req).id, query);
+  ok(res, { transactions, summary }, meta);
 });
+
+transactionRouter.post(
+  '/search-parse',
+  validate({ body: searchParseSchema }),
+  async (req, res) => {
+    const { query } = req.body as SearchParseInput;
+    const proposal = await parseNaturalLanguageSearch(currentUser(req).id, query);
+    ok(res, { proposal });
+  },
+);
 
 /**
  * Declared before `/:id`, or Express matches "summary" as an id and the route is

@@ -33,6 +33,20 @@ const userSchema = new Schema(
     notificationPrefs: {
       budgetAlerts: { type: Boolean, required: true, default: true },
       recurringAlerts: { type: Boolean, required: true, default: true },
+      peopleAlerts: { type: Boolean, required: true, default: true },
+      spendingAlerts: { type: Boolean, required: true, default: true },
+      monthlySummaryAlerts: { type: Boolean, required: true, default: true },
+      previewMode: {
+        type: String,
+        enum: ['detailed', 'basic', 'private'],
+        required: true,
+        default: 'private',
+      },
+      quietHours: {
+        enabled: { type: Boolean, required: true, default: true },
+        start: { type: String, required: true, default: '22:00' },
+        end: { type: String, required: true, default: '08:00' },
+      },
     },
     /**
      * Expo push tokens, one per device. Stored so the delivery seam in

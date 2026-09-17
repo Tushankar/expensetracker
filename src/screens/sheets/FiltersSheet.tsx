@@ -20,6 +20,7 @@ import { RUPEE, paiseToRupeeInput, rupeesToPaise } from '@/utils/currency';
 import { tapFeedback } from '@/utils/haptics';
 
 export type Filters = {
+  merchant?: string;
   accountId?: string;
   categoryId?: string;
   paymentMethod?: PaymentMethod;
@@ -56,6 +57,7 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
   // Seeded once per open — the caller's `key` changes each time the sheet is
   // shown, so there is no effect copying `value` into state on every render.
   const [draft, setDraft] = useState<Filters>(value);
+  const [merchantText, setMerchantText] = useState(value.merchant ?? '');
   const [minText, setMinText] = useState(() =>
     value.minAmount === undefined ? '' : paiseToRupeeInput(value.minAmount),
   );
@@ -75,6 +77,7 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
 
     onApply({
       ...draft,
+      merchant: merchantText.trim() || undefined,
       minAmount: min,
       // A range typed backwards is a slip, not a request for zero results.
       maxAmount: max !== undefined && min !== undefined && max < min ? min : max,
@@ -83,6 +86,7 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
 
   function reset() {
     setDraft({});
+    setMerchantText('');
     setMinText('');
     setMaxText('');
   }
@@ -117,7 +121,24 @@ export function FiltersSheet({ visible, value, onClose, onApply }: FiltersSheetP
       <Text
         variant="labelSm"
         tone="secondary"
-        style={{ marginTop: theme.spacing.xxl, marginBottom: theme.spacing.sm }}
+        style={{ marginTop: theme.spacing.xl, marginBottom: theme.spacing.sm }}
+      >
+        Merchant
+      </Text>
+      <Input
+        placeholder="e.g. Zomato, Amazon, Uber"
+        value={merchantText}
+        onChangeText={setMerchantText}
+        leftIcon="search"
+        autoCapitalize="words"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
+
+      <Text
+        variant="labelSm"
+        tone="secondary"
+        style={{ marginTop: theme.spacing.xl, marginBottom: theme.spacing.sm }}
       >
         Amount range
       </Text>

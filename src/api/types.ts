@@ -123,11 +123,48 @@ export type TransactionFilters = {
   categoryId?: string;
   paymentMethod?: PaymentMethod;
   q?: string;
+  search?: string;
+  merchant?: string;
   from?: string;
   to?: string;
   minAmount?: number;
   maxAmount?: number;
   sort?: '-date' | 'date' | '-amount' | 'amount';
+};
+
+export type SearchConfidence = 'high' | 'medium' | 'low';
+
+export type UnderstoodSearch = {
+  merchant?: string;
+  type?: TransactionType;
+  minAmount?: number; // paise
+  maxAmount?: number; // paise
+  from?: string; // ISO
+  to?: string; // ISO
+  periodLabel?: string;
+  accountName?: string;
+  categoryName?: string;
+  paymentMethod?: PaymentMethod;
+  description?: string;
+  obligationIntent?: {
+    personName?: string;
+    type: 'loan' | 'paid_for' | 'borrowed' | 'split';
+    direction: 'owed_to_me' | 'i_owe';
+  };
+};
+
+export type SearchProposalResult = {
+  confidence: SearchConfidence;
+  understood: UnderstoodSearch;
+  filters: TransactionFilters;
+  displaySummary: string;
+  requiresConfirmation: boolean;
+};
+
+export type FilteredSummary = {
+  count: number;
+  totalExpense: number;
+  totalIncome: number;
 };
 
 export type CreateTransactionInput =

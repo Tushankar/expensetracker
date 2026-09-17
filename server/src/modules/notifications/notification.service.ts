@@ -4,12 +4,17 @@ import { logger } from '../../config/logger';
 import { ApiError } from '../../lib/ApiError';
 import { pageMeta, type PageMeta } from '../../lib/pagination';
 import { UserModel } from '../users/user.model';
-
+import { DeviceTokenModel, type Platform } from './deviceToken.model';
 import {
   NotificationModel,
   type Notification,
   type NotificationType,
 } from './notification.model';
+import type {
+  NotificationPreferences,
+  UpdateNotificationPreferences,
+} from './notification.schemas';
+import { applyPreviewPrivacy, isInQuietHours } from './alertEngine';
 
 export type PublicNotification = {
   id: string;
@@ -17,11 +22,20 @@ export type PublicNotification = {
   title: string;
   body: string;
   data: Record<string, unknown>;
+  metadata: Record<string, unknown>;
   read: boolean;
+  delivered: boolean;
+  scheduledFor: string;
   createdAt: string;
 };
 
-type NotificationLike = Notification & { _id: Types.ObjectId; createdAt?: Date };
+type NotificationLike = Notification & {
+  _id: Types.ObjectId;
+  createdAt?: Date;
+  delivered?: boolean;
+  scheduledFor?: Date;
+  metadata?: Record<string, unknown>;
+};
 
 export function toPublicNotification(row: NotificationLike): PublicNotification {
   return {
@@ -30,7 +44,10 @@ export function toPublicNotification(row: NotificationLike): PublicNotification 
     title: row.title,
     body: row.body,
     data: (row.data ?? {}) as Record<string, unknown>,
+    metadata: (row.metadata ?? row.data ?? {}) as Record<string, unknown>,
     read: row.readAt !== null && row.readAt !== undefined,
+    delivered: Boolean(row.delivered),
+    scheduledFor: (row.scheduledFor ?? row.createdAt ?? new Date()).toISOString(),
     createdAt: (row.createdAt ?? new Date()).toISOString(),
   };
 }
@@ -43,14 +60,30 @@ export type RaiseInput = {
   /** Names the exact thing and period this alert is about. See the model. */
   dedupeKey: string;
   data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  scheduledFor?: Date;
 };
 
 /** Which preference switch governs which alert. */
-const PREFERENCE_FOR: Record<NotificationType, 'budgetAlerts' | 'recurringAlerts'> = {
+const PREFERENCE_FOR: Partial<
+  Record<
+    NotificationType,
+    | 'budgetAlerts'
+    | 'recurringAlerts'
+    | 'peopleAlerts'
+    | 'spendingAlerts'
+    | 'monthlySummaryAlerts'
+  >
+> = {
   budget_warning: 'budgetAlerts',
   budget_exceeded: 'budgetAlerts',
   recurring_upcoming: 'recurringAlerts',
+  recurring_due: 'recurringAlerts',
   recurring_created: 'recurringAlerts',
+  money_owed_due: 'peopleAlerts',
+  repayment_due: 'peopleAlerts',
+  unusual_spending: 'spendingAlerts',
+  monthly_summary: 'monthlySummaryAlerts',
 };
 
 /**
@@ -67,11 +100,13 @@ const PREFERENCE_FOR: Record<NotificationType, 'budgetAlerts' | 'recurringAlerts
  */
 export async function raise(input: RaiseInput): Promise<boolean> {
   try {
-    const user = await UserModel.findById(input.userId).select('notificationPrefs').lean();
+    const user = await UserModel.findById(input.userId).select('notificationPrefs timezone').lean();
     if (!user) return false;
 
-    const preference = PREFERENCE_FOR[input.type];
-    if (user.notificationPrefs?.[preference] === false) return false;
+    const prefKey = PREFERENCE_FOR[input.type];
+    if (prefKey && (user.notificationPrefs as any)?.[prefKey] === false) {
+      return false;
+    }
 
     const result = await NotificationModel.updateOne(
       { userId: input.userId, dedupeKey: input.dedupeKey },
@@ -81,23 +116,23 @@ export async function raise(input: RaiseInput): Promise<boolean> {
           type: input.type,
           title: input.title,
           body: input.body,
-          data: input.data ?? {},
+          data: input.data ?? input.metadata ?? {},
+          metadata: input.metadata ?? input.data ?? {},
           dedupeKey: input.dedupeKey,
           readAt: null,
+          delivered: false,
+          scheduledFor: input.scheduledFor ?? new Date(),
         },
       },
       { upsert: true },
     );
 
-    // An upsert rather than a create-and-catch: the write reaches the database
-    // once either way, and `upsertedCount` says plainly whether this call was the
-    // one that inserted. A duplicate is the normal path, not an exception.
     const isNew = result.upsertedCount === 1;
-    if (isNew) await deliver(input);
+    if (isNew) {
+      await deliver(input, user);
+    }
     return isNew;
   } catch (error) {
-    // Includes the duplicate-key race between two concurrent upserts, which is a
-    // correct outcome rather than a failure.
     if ((error as { code?: number })?.code === 11000) return false;
     logger.warn({ err: error, type: input.type }, 'could not record notification');
     return false;
@@ -105,33 +140,101 @@ export async function raise(input: RaiseInput): Promise<boolean> {
 }
 
 /**
- * The push seam.
- *
- * Deliberately a no-op beyond a log line. Everything upstream — the triggers, the
- * dedupe, the per-user preferences, the token storage on the user — is what takes
- * real work to get right, and it is all here. Sending is then one call to Expo's
- * push service from inside this function, with no other file changing.
+ * Push notification delivery helper.
+ * Delivers via Expo Push API if push tokens exist and not in quiet hours.
+ * Never throws — failures are logged and recorded without interrupting user operations.
  */
-async function deliver(input: RaiseInput): Promise<void> {
-  const user = await UserModel.findById(input.userId).select('pushTokens').lean();
-  const tokens = user?.pushTokens ?? [];
+async function deliver(
+  input: RaiseInput,
+  userDoc?: {
+    notificationPrefs?: any;
+    timezone?: string;
+  } | null,
+): Promise<void> {
+  try {
+    const user =
+      userDoc ??
+      (await UserModel.findById(input.userId).select('notificationPrefs timezone pushTokens').lean());
+    if (!user) return;
 
-  logger.info(
-    { userId: String(input.userId), type: input.type, devices: tokens.length },
-    'notification raised',
-  );
+    // Check quiet hours
+    const timezone = user.timezone ?? 'Asia/Kolkata';
+    const quietHours = user.notificationPrefs?.quietHours;
+    if (isInQuietHours(new Date(), timezone, quietHours)) {
+      logger.info(
+        { userId: String(input.userId), type: input.type },
+        'notification in quiet hours; skipping immediate push',
+      );
+      return;
+    }
 
-  // TODO(step-4): POST the batch to https://exp.host/--/api/v2/push/send, and
-  // drop any token the response reports as DeviceNotRegistered.
+    // Fetch device tokens
+    const [legacyUser, deviceTokens] = await Promise.all([
+      UserModel.findById(input.userId).select('pushTokens').lean(),
+      DeviceTokenModel.find({ userId: input.userId, enabled: true }).select('token').lean(),
+    ]);
+
+    const allTokens = Array.from(
+      new Set([
+        ...(legacyUser?.pushTokens ?? []),
+        ...deviceTokens.map((d) => d.token),
+      ]),
+    ).filter(Boolean);
+
+    if (allTokens.length === 0) return;
+
+    // Privacy preview mode
+    const previewMode = user.notificationPrefs?.previewMode ?? 'private';
+    const { title, body } = applyPreviewPrivacy(input.title, input.body, previewMode);
+
+    logger.info(
+      { userId: String(input.userId), type: input.type, devices: allTokens.length },
+      'delivering push notification',
+    );
+
+    // Call Expo push service batch endpoint
+    const messages = allTokens.map((token) => ({
+      to: token,
+      sound: 'default',
+      title,
+      body,
+      data: input.data ?? {},
+    }));
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+
+    if (response.ok) {
+      await NotificationModel.updateOne(
+        { userId: input.userId, dedupeKey: input.dedupeKey },
+        { $set: { delivered: true } },
+      );
+    } else {
+      logger.warn(
+        { status: response.status, statusText: response.statusText },
+        'Expo push delivery non-200 response',
+      );
+    }
+  } catch (error) {
+    logger.warn({ err: error, type: input.type }, 'Push delivery network error; safely ignored');
+  }
 }
 
 export async function listNotifications(
   userId: string,
-  options: { page: number; limit: number; unreadOnly: boolean },
+  options: { page: number; limit: number; unreadOnly: boolean; type?: NotificationType },
 ): Promise<{ notifications: PublicNotification[]; meta: PageMeta; unread: number }> {
   const filter = {
     userId: new Types.ObjectId(userId),
     ...(options.unreadOnly ? { readAt: null } : {}),
+    ...(options.type ? { type: options.type } : {}),
   };
 
   const [rows, total, unread] = await Promise.all([
@@ -163,7 +266,6 @@ export async function markRead(userId: string, notificationId: string): Promise<
   );
 
   if (!row) {
-    // Already read is not a failure — two taps on the same row should not error.
     const existing = await NotificationModel.findOne({
       _id: notificationId,
       userId: new Types.ObjectId(userId),
@@ -188,11 +290,109 @@ export async function clearAll(userId: string): Promise<number> {
   return result.deletedCount ?? 0;
 }
 
-/** Registers a device for push. Idempotent — the same token twice is one entry. */
-export async function registerDevice(userId: string, token: string): Promise<void> {
-  await UserModel.updateOne({ _id: userId }, { $addToSet: { pushTokens: token } });
+// -----------------------------------------------------------------------------
+// Preferences API
+// -----------------------------------------------------------------------------
+
+export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  const user = await UserModel.findById(userId).select('notificationPrefs').lean();
+  if (!user) throw ApiError.notFound('User not found');
+
+  const prefs = user.notificationPrefs ?? ({} as any);
+
+  return {
+    budgetAlerts: prefs.budgetAlerts !== false,
+    recurringAlerts: prefs.recurringAlerts !== false,
+    peopleAlerts: prefs.peopleAlerts !== false,
+    spendingAlerts: prefs.spendingAlerts !== false,
+    monthlySummaryAlerts: prefs.monthlySummaryAlerts !== false,
+    previewMode: prefs.previewMode ?? 'private',
+    quietHours: prefs.quietHours ?? { enabled: true, start: '22:00', end: '08:00' },
+  };
 }
 
-export async function unregisterDevice(userId: string, token: string): Promise<void> {
+export async function updateNotificationPreferences(
+  userId: string,
+  patch: UpdateNotificationPreferences,
+): Promise<NotificationPreferences> {
+  const user = await UserModel.findById(userId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  const current = (user.notificationPrefs ?? {}) as any;
+
+  user.notificationPrefs = {
+    budgetAlerts: patch.budgetAlerts ?? current.budgetAlerts ?? true,
+    recurringAlerts: patch.recurringAlerts ?? current.recurringAlerts ?? true,
+    peopleAlerts: patch.peopleAlerts ?? current.peopleAlerts ?? true,
+    spendingAlerts: patch.spendingAlerts ?? current.spendingAlerts ?? true,
+    monthlySummaryAlerts: patch.monthlySummaryAlerts ?? current.monthlySummaryAlerts ?? true,
+    previewMode: patch.previewMode ?? current.previewMode ?? 'private',
+    quietHours: {
+      enabled: patch.quietHours?.enabled ?? current.quietHours?.enabled ?? true,
+      start: patch.quietHours?.start ?? current.quietHours?.start ?? '22:00',
+      end: patch.quietHours?.end ?? current.quietHours?.end ?? '08:00',
+    },
+  };
+
+  await user.save();
+  return getNotificationPreferences(userId);
+}
+
+// -----------------------------------------------------------------------------
+// Device Token API
+// -----------------------------------------------------------------------------
+
+export async function registerDevice(
+  userId: string,
+  token: string,
+  platform: Platform = 'unknown',
+  deviceId?: string | null,
+): Promise<{ registered: boolean; id: string }> {
+  // Upsert in DeviceTokenModel
+  const doc = await DeviceTokenModel.findOneAndUpdate(
+    { token },
+    {
+      $set: {
+        userId: new Types.ObjectId(userId),
+        platform,
+        deviceId: deviceId ?? null,
+        enabled: true,
+        lastSeenAt: new Date(),
+      },
+    },
+    { upsert: true, new: true },
+  );
+
+  // Maintain backward compatibility with UserModel.pushTokens
+  await UserModel.updateOne({ _id: userId }, { $addToSet: { pushTokens: token } });
+
+  return { registered: true, id: String(doc._id) };
+}
+
+export async function unregisterDevice(userId: string, token: string): Promise<boolean> {
+  await DeviceTokenModel.updateOne(
+    { userId: new Types.ObjectId(userId), token },
+    { $set: { enabled: false } },
+  );
   await UserModel.updateOne({ _id: userId }, { $pull: { pushTokens: token } });
+  return true;
+}
+
+export async function deleteDevice(userId: string, deviceIdOrToken: string): Promise<boolean> {
+  const isObjectId = Types.ObjectId.isValid(deviceIdOrToken);
+  const filter = isObjectId
+    ? { _id: deviceIdOrToken, userId: new Types.ObjectId(userId) }
+    : { token: deviceIdOrToken, userId: new Types.ObjectId(userId) };
+
+  const doc = await DeviceTokenModel.findOneAndDelete(filter);
+  if (doc?.token) {
+    await UserModel.updateOne({ _id: userId }, { $pull: { pushTokens: doc.token } });
+  }
+  return doc !== null;
+}
+
+export async function listDevices(userId: string) {
+  return DeviceTokenModel.find({ userId: new Types.ObjectId(userId) })
+    .sort({ lastSeenAt: -1 })
+    .lean();
 }
