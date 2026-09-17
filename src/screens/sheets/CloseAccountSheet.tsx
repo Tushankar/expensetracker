@@ -93,7 +93,10 @@ export function CloseAccountSheet({ visible, onClose }: CloseAccountSheetProps) 
                 : `Enter your password and type ${CONFIRM_WORD} above to enable this`
             }
           />
-          <Button label="Keep my account" variant="ghost" size="md" fullWidth onPress={onClose} />
+          {/* Bordered rather than bare text. The way out of an irreversible
+              action should not be the quietest thing on the sheet, especially
+              once the button above it has gone bright red. */}
+          <Button label="Keep my account" variant="secondary" size="md" fullWidth onPress={onClose} />
         </View>
       }
     >

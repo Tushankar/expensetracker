@@ -62,8 +62,26 @@ export function isAuthError(error: unknown): boolean {
  * or a stack trace.
  */
 export function errorMessage(error: unknown): string {
+  // Both of these carry a message written to be read: the server's, or ours.
   if (isNetworkError(error)) return error.message;
   if (isApiError(error)) return error.message;
-  if (error instanceof Error && error.message) return error.message;
+
+  /**
+   * Anything else is a fault, not a message.
+   *
+   * Nothing in the app throws a bare `Error` on purpose — every deliberate
+   * failure is an `ApiError` or a `NetworkError` — so whatever lands here is a
+   * runtime bug, and its text reads like one. A failed export used to put
+   * "this.validatePath is not a function" in a toast under "Could not export",
+   * which tells the user nothing and tells everyone else too much.
+   *
+   * The detail still surfaces in a development build, where someone is there to
+   * read it. `process.env.NODE_ENV` rather than `__DEV__`: Metro inlines both,
+   * but this module is also imported by the Node test scripts, where `__DEV__`
+   * does not exist.
+   */
+  if (process.env.NODE_ENV !== 'production' && error instanceof Error && error.message) {
+    return error.message;
+  }
   return 'Something went wrong';
 }

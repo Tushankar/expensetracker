@@ -25,8 +25,8 @@ export type TransactionRowProps = {
   destinationAccount?: Account;
   /**
    * `compact` is the Home summary row: a category tile, no chip, no chevron.
-   * `detailed` is the Activity row: a merchant monogram, a category chip and a
-   * disclosure chevron.
+   * `detailed` is the Activity row: a merchant monogram, a category chip, and a
+   * disclosure chevron where the width allows one.
    */
   variant?: 'compact' | 'detailed';
   onPress?: (transaction: Transaction) => void;
@@ -44,8 +44,29 @@ export type TransactionRowProps = {
  */
 const CHIP_LABEL_MIN_WIDTH = 430;
 
-/** Holds the amount column steady. Fits a seven-figure rupee total signed. */
-const AMOUNT_COLUMN_WIDTH = 86;
+/**
+ * Below this, the disclosure chevron is dropped from the detailed row.
+ *
+ * On a 360dp Android — the width a large share of this app's phones actually
+ * are — the chevron and its gap cost 18dp the merchant column does not have,
+ * and "Credit Card  ·  9:05 am" truncates again. It is the cheapest 18dp in the
+ * row: the row is a pressable card that animates on press and already carries
+ * "Opens transaction details" as its accessibility hint, so the chevron repeats
+ * what three other things already say. Where there is room it stays.
+ */
+const CHEVRON_MIN_WIDTH = 380;
+
+/**
+ * Holds the amount column steady so the category tiles beside it line up.
+ *
+ * Measured, because the first guess at this cost more than it bought: an 86dp
+ * column took 26dp off the merchant text and put the timestamp truncation
+ * straight back. A signed seven-figure total ("+₹1,57,000") renders at ~64dp,
+ * and a four-figure one at ~47dp, so this aligns every realistic amount while
+ * leaving the text column 145dp — past the 134dp the longest method-and-time
+ * line needs.
+ */
+const AMOUNT_COLUMN_WIDTH = 66;
 
 /**
  * One transaction row.
@@ -71,6 +92,7 @@ export const TransactionRow = memo(function TransactionRow({
   const { animatedStyle, onPressIn, onPressOut } = usePressAnimation(theme.pressScale.card);
 
   const detailed = variant === 'detailed';
+  const showChevron = detailed && width >= CHEVRON_MIN_WIDTH;
   const isIncome = transaction.type === 'income';
   const isTransfer = transaction.type === 'transfer';
 
@@ -107,7 +129,10 @@ export const TransactionRow = memo(function TransactionRow({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: detailed ? theme.spacing.sm + 2 : theme.spacing.md,
+        // 8 rather than 10 on the detailed row: three gaps across it, so the
+        // 6dp is the difference between "Net Banking  ·  10:00 am" fitting on a
+        // 360dp Android and losing its last two characters.
+        gap: detailed ? theme.spacing.sm : theme.spacing.md,
         minHeight: detailed ? 72 : 64,
         paddingVertical: theme.spacing.md,
       }}
@@ -159,7 +184,9 @@ export const TransactionRow = memo(function TransactionRow({
           {amount}
         </Text>
 
-        {detailed ? <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} /> : null}
+        {showChevron ? (
+          <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
+        ) : null}
       </View>
     </View>
   );

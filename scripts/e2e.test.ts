@@ -926,6 +926,39 @@ async function main(): Promise<void> {
     assert.equal(lines.length, file.rowCount + 1, 'the row count and the file disagree');
   });
 
+  /**
+   * The window Settings actually sends, against the cap the server actually
+   * enforces.
+   *
+   * Every other export test here asks for a year. The app asks for five, and for
+   * a while it anchored the start to the first of the month — 1,843 days against
+   * a 1,830-day cap, so "Export transactions" returned 400 from the 6th of every
+   * month onwards and no test noticed, because no test asked for what the button
+   * asks for.
+   */
+  await test('the five-year window the export button sends is inside the cap', async () => {
+    const { dataApi } = await import('../src/api/endpoints');
+    const { exportWindow, EXPORT_MAX_DAYS } = await import('../src/utils/period');
+
+    // Every day of the month, not just today's: the bug only appeared from the
+    // 6th onwards, so a test run on the 3rd would have passed through it.
+    for (let day = 1; day <= 28; day += 1) {
+      for (const month of [0, 1, 2, 11]) {
+        const now = new Date(2028, month, day, 23, 59, 59);
+        const window = exportWindow(now);
+        const days =
+          (now.getTime() - new Date(window.from).getTime()) / 86_400_000;
+        assert.ok(
+          days <= EXPORT_MAX_DAYS,
+          `the export window on ${now.toDateString()} is ${days.toFixed(1)} days, past the cap`,
+        );
+      }
+    }
+
+    const file = await dataApi.exportTransactions(exportWindow());
+    assert.ok(file.rowCount > 0, 'the five-year export came back empty');
+  });
+
   await test('a transfer is exported as a transfer, not as spending', async () => {
     const { dataApi } = await import('../src/api/endpoints');
 

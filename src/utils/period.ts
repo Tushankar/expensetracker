@@ -229,3 +229,25 @@ function rollingMonths(now: Date, months: number, label: string): Range {
 export function periodLabel(selection: PeriodSelection, now: Date = new Date()): string {
   return periodRange(selection, now).label;
 }
+
+/**
+ * The window "Export transactions" asks for: everything, expressed as the widest
+ * range the API will accept.
+ *
+ * The server caps an export at `5 * 366` days. Anchoring the start to the first
+ * of the month instead of to today put the window at 1,843 days, so the button
+ * returned 400 from the 6th of every month onwards. Anchored to the day it is at
+ * most 1,828 days — five calendar years, both possible leap days, and the slack
+ * between local midnight and now.
+ *
+ * It lives here, beside the other range maths, so the export test can assert
+ * against the same function the button calls rather than a copy of it that can
+ * drift.
+ */
+export function exportWindow(now: Date = new Date()): { from: string; to: string } {
+  const from = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  return { from: from.toISOString(), to: now.toISOString() };
+}
+
+/** The server's own limit, so a caller can assert it rather than restate it. */
+export const EXPORT_MAX_DAYS = 5 * 366;

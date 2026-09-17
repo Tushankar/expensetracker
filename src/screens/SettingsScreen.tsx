@@ -34,6 +34,7 @@ import { useAccentStore } from '@/store/themeStore';
 import { accentList, colorsByAccent, spacing, useTheme } from '@/theme';
 import { shareTextFile } from '@/services/exportFile';
 import { errorFeedback, successFeedback, tapFeedback } from '@/utils/haptics';
+import { exportWindow } from '@/utils/period';
 
 /**
  * Lines a divider up with the row title rather than its icon tile: the tile is
@@ -81,19 +82,16 @@ export function SettingsScreen() {
    * A backup with a date filter on it is not a backup. Five years back is the
    * server's own cap and comfortably older than this app, so in practice this is
    * "all of it" without needing an endpoint that says so.
+   *
+   * The window itself is `exportWindow()`, beside the rest of the range maths,
+   * so the export test asserts against the same function this calls.
    */
   async function exportEverything() {
     if (exportTransactions.isPending) return;
     tapFeedback();
 
-    const now = new Date();
-    const from = new Date(now.getFullYear() - 5, now.getMonth(), 1);
-
     try {
-      const file = await exportTransactions.mutateAsync({
-        from: from.toISOString(),
-        to: now.toISOString(),
-      });
+      const file = await exportTransactions.mutateAsync(exportWindow());
 
       if (file.rowCount === 0) {
         showToast({
