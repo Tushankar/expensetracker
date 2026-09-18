@@ -672,7 +672,7 @@ function RingGlow({ color }: { color: string }) {
         <Defs>
           <RadialGradient id="ringGlow" cx="50%" cy="50%" r="50%">
             <Stop offset={peak * 0.6} stopColor={color} stopOpacity={0} />
-            <Stop offset={peak} stopColor={color} stopOpacity={0.13} />
+            <Stop offset={peak} stopColor={color} stopOpacity={0.1} />
             <Stop offset="1" stopColor={color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
@@ -694,8 +694,8 @@ function CornerBloom({ color }: { color: string }) {
     >
       <Defs>
         <RadialGradient id="splitCornerBloom" cx="50%" cy="50%" r="50%">
-          <Stop offset="0" stopColor={color} stopOpacity={0.14} />
-          <Stop offset="0.6" stopColor={color} stopOpacity={0.035} />
+          <Stop offset="0" stopColor={color} stopOpacity={0.1} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.03} />
           <Stop offset="1" stopColor={color} stopOpacity={0} />
         </RadialGradient>
       </Defs>
