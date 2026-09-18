@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 
 import { useTheme } from '@/theme';
 
@@ -9,11 +9,15 @@ export type HeaderGlowProps = {
 };
 
 /**
- * The green bloom behind the greeting.
+ * Two faint rings behind the greeting, echoing the ring motif the savings card uses.
  *
- * Purely atmospheric — it gives the top of the screen some depth so the hero card
- * does not sit on a flat black field. Absolutely positioned and non-interactive, so
- * it never affects layout or touch.
+ * This used to carry a brand bloom as well, to keep the hero card off a flat black
+ * field. The ambient field does that now, app-wide and in the same corner — and
+ * two blooms in one corner is not twice as atmospheric, it is a bright patch that
+ * takes a caption on the card below it under AA. So the bloom is gone and the rings,
+ * which are hairlines and cost the contrast budget nothing, stayed.
+ *
+ * Absolutely positioned and non-interactive, so it never affects layout or touch.
  */
 export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
   const theme = useTheme();
@@ -27,23 +31,12 @@ export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <Defs>
-        <RadialGradient id="headerBloom" cx="50%" cy="50%" r="50%">
-          <Stop offset="0" stopColor={theme.colors.brand} stopOpacity={0.22} />
-          <Stop offset="0.55" stopColor={theme.colors.brand} stopOpacity={0.06} />
-          <Stop offset="1" stopColor={theme.colors.brand} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-
-      <Ellipse cx={width * 0.82} cy={height * 0.42} rx={width * 0.52} ry={height * 0.5} fill="url(#headerBloom)" />
-
-      {/* Two faint rings, echoing the ring motif the savings card uses. */}
       <Circle
         cx={width * 0.88}
         cy={height * 0.4}
         r={78}
-        stroke={theme.colors.brand}
-        strokeOpacity={0.12}
+        stroke={theme.colors.brandText}
+        strokeOpacity={0.14}
         strokeWidth={1}
         fill="none"
       />
@@ -51,8 +44,8 @@ export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
         cx={width * 0.88}
         cy={height * 0.4}
         r={112}
-        stroke={theme.colors.brand}
-        strokeOpacity={0.07}
+        stroke={theme.colors.brandText}
+        strokeOpacity={0.08}
         strokeWidth={1}
         fill="none"
       />
@@ -61,7 +54,10 @@ export function HeaderGlow({ width, height = 220 }: HeaderGlowProps) {
 }
 
 const styles = StyleSheet.create({
-  glow: { position: 'absolute', top: 0, left: 0,
+  glow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     pointerEvents: 'none',
   },
 });
