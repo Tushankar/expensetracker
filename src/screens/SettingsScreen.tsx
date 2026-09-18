@@ -21,6 +21,7 @@ import {
   Badge,
   Card,
   Divider,
+  GlassFill,
   Icon,
   IconTile,
   ListRow,
@@ -186,15 +187,16 @@ export function SettingsScreen() {
             theme.shadows.md,
             {
               borderRadius: theme.radius.xl,
-              borderWidth: theme.layout.hairline,
-              borderColor: theme.colors.heroBorder,
-              borderTopColor: 'rgba(255, 255, 255, 0.16)',
               overflow: 'hidden',
               padding: theme.spacing.xl,
             },
           ]}
         >
           <ProfileBloom color={theme.colors.brandText} />
+          {/* The slab is a gradient for its colour and glass for its surface,
+              like the balance card. The glow above is behind this, so the
+              material diffuses it rather than the text having to survive it. */}
+          <GlassFill tone="hero" radius="xl" rimColor={theme.colors.heroBorder} />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
             <View
@@ -770,11 +772,8 @@ function ProfileBloom({ color }: { color: string }) {
     >
       <Defs>
         <RadialGradient id="profileBloom" cx="50%" cy="50%" r="50%">
-          {/* Capped: this bloom sits over glass that is itself over the ambient
-          field, and the two together were taking captions on this card under
-          AA. What shows inside the card was always the falloff anyway. */}
-          <Stop offset="0" stopColor={color} stopOpacity={0.1} />
-          <Stop offset="0.6" stopColor={color} stopOpacity={0.03} />
+          <Stop offset="0" stopColor={color} stopOpacity={0.22} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.05} />
           <Stop offset="1" stopColor={color} stopOpacity={0} />
         </RadialGradient>
       </Defs>

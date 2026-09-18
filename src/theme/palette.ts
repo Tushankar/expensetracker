@@ -54,6 +54,14 @@ export type AccentSpec = {
   heroSurfaceEnd: string;
   heroTile: string;
   heroBorder: string;
+  /**
+   * Quiet text on the hero slab.
+   *
+   * Lifted a step in every accent: the slab carries a corner glow, and at that
+   * glow's peak the old values measured 3.9-4.2:1. Behind glass the glow is
+   * attenuated and these clear AA with room to spare, while still reading as
+   * clearly quieter than the white beside them.
+   */
   heroTextMuted: string;
 };
 
@@ -83,7 +91,7 @@ export const accents: Record<AccentId, AccentSpec> = {
     heroSurfaceEnd: '#150F2E',
     heroTile: '#291F55',
     heroBorder: 'rgba(155, 132, 255, 0.18)',
-    heroTextMuted: '#A9A1CC',
+    heroTextMuted: '#C0BADA',
   },
 
   green: {
@@ -110,7 +118,7 @@ export const accents: Record<AccentId, AccentSpec> = {
     heroSurfaceEnd: '#071510',
     heroTile: '#0E241B',
     heroBorder: 'rgba(0, 226, 140, 0.16)',
-    heroTextMuted: '#8FA69C',
+    heroTextMuted: '#ABBDB5',
   },
 
   red: {
@@ -136,7 +144,7 @@ export const accents: Record<AccentId, AccentSpec> = {
     heroSurfaceEnd: '#1F0C12',
     heroTile: '#441A26',
     heroBorder: 'rgba(255, 122, 136, 0.18)',
-    heroTextMuted: '#C6A8AE',
+    heroTextMuted: '#D1B9BD',
   },
 };
 

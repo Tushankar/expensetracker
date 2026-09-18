@@ -170,6 +170,15 @@ export function useGlassMode(): GlassMode {
 
 export type GlassSurfaceProps = {
   children?: ReactNode;
+  /**
+   * Rendered underneath the material, full-bleed.
+   *
+   * For the corner glows several cards carry. Behind the glass they read as a
+   * light source the material is diffusing, which is both the truer effect and
+   * the safe one: the fill attenuates them, where the same glow painted over the
+   * top adds its whole luminance to the text on that card.
+   */
+  backdrop?: ReactNode;
   /** Which rung of the material ladder. See `GlassTone`. */
   tone?: GlassTone;
   radius?: Radius | number;
@@ -225,6 +234,7 @@ export type GlassSurfaceProps = {
  */
 export function GlassSurface({
   children,
+  backdrop,
   tone = 'regular',
   radius = 'lg',
   corners,
@@ -242,14 +252,16 @@ export function GlassSurface({
 }: GlassSurfaceProps) {
   const theme = useTheme();
   const mode = useGlassMode();
-  const backdrop = useGlassBackdrop();
+  // Not to be confused with the `backdrop` prop: this is the view Android blurs,
+  // that is the decoration drawn beneath the material.
+  const blurTarget = useGlassBackdrop();
 
   const layer = theme.glass[tone];
   const corner = typeof radius === 'number' ? radius : theme.radius[radius];
   const elevation = theme.shadows[shadow];
 
   const androidBlur =
-    Platform.OS === 'android' && backdrop != null && (backdropBlur ?? tone === 'chrome');
+    Platform.OS === 'android' && blurTarget != null && (backdropBlur ?? tone === 'chrome');
 
   // Apple's material already carries most of the colour, so ours steps aside.
   const fill = useMemo(() => {
@@ -289,6 +301,7 @@ export function GlassSurface({
           style,
         ]}
       >
+        {backdrop}
         {children}
       </View>
     );
@@ -296,6 +309,8 @@ export function GlassSurface({
 
   return (
     <View testID={testID} pointerEvents={pointerEvents} style={[shell, elevation, style]}>
+      {backdrop}
+
       {mode === 'native' ? (
         <GlassView
           style={layerStyle}
@@ -312,7 +327,7 @@ export function GlassSurface({
           intensity={layer.intensity}
           blurReductionFactor={layer.blurReduction}
           {...(androidBlur
-            ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurTarget: backdrop }
+            ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurTarget }
             : null)}
         />
       )}

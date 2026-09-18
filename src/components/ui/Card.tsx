@@ -31,6 +31,8 @@ const VARIANT_TONE: Record<CardVariant, GlassTone> = {
 
 export type CardProps = {
   children: ReactNode;
+  /** Drawn under the material. See `GlassSurface`. */
+  backdrop?: ReactNode;
   variant?: CardVariant;
   /** Overrides the variant's material outright. */
   tone?: GlassTone;
@@ -60,6 +62,7 @@ export type CardProps = {
  */
 export function Card({
   children,
+  backdrop,
   variant = 'elevated',
   tone,
   padding,
@@ -100,6 +103,7 @@ export function Card({
         padding={pad}
         shadow={elevation}
         sheen={sheen}
+        backdrop={backdrop}
         style={style}
       >
         {children}
@@ -128,7 +132,14 @@ export function Card({
           fading a Liquid Glass view out stops it rendering as glass at all. The
           press state is therefore a wash *over* the material, not under it. */}
       <Animated.View style={animatedStyle}>
-        <GlassSurface tone={material} radius={radius} padding={pad} shadow={elevation} sheen={sheen}>
+        <GlassSurface
+          tone={material}
+          radius={radius}
+          padding={pad}
+          shadow={elevation}
+          sheen={sheen}
+          backdrop={backdrop}
+        >
           <PressWash progress={progress} radius={radius} />
           {children}
         </GlassSurface>

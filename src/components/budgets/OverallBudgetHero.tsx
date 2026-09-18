@@ -5,7 +5,7 @@ import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-s
 import type { BudgetProgress } from '@/api/types';
 import { BudgetGauge } from '@/components/budgets/BudgetGauge';
 import { stateColor } from '@/components/budgets/BudgetRow';
-import { Badge, Icon, IconButton, Text, type IconName } from '@/components/ui';
+import { Badge, GlassFill, Icon, IconButton, Text, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { formatINR } from '@/utils/currency';
 
@@ -90,17 +90,16 @@ export function OverallBudgetHero({
         theme.shadows.md,
         {
           borderRadius: theme.radius.xl,
-          borderWidth: theme.layout.hairline,
-          borderColor: theme.colors.heroBorder,
-          // A lighter top edge reads as a light source above the card — the cheapest
-          // depth cue there is on a near-black canvas.
-          borderTopColor: 'rgba(255, 255, 255, 0.16)',
           overflow: 'hidden',
           padding: theme.spacing.xl,
         },
       ]}
     >
       <HeroBloom color={accent} />
+      {/* The slab is a gradient for its colour and glass for its surface,
+          like the balance card. The glow above is behind this, so the
+          material diffuses it rather than the text having to survive it. */}
+      <GlassFill tone="hero" radius="xl" rimColor={theme.colors.heroBorder} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
         <Icon name="target" size={15} color={theme.colors.heroTextMuted} strokeWidth={2} />
@@ -317,11 +316,8 @@ function HeroBloom({ color }: { color: string }) {
     >
       <Defs>
         <RadialGradient id="budgetHeroBloom" cx="50%" cy="50%" r="50%">
-          {/* Capped: this bloom sits over glass that is itself over the ambient
-          field, and the two together were taking captions on this card under
-          AA. What shows inside the card was always the falloff anyway. */}
-          <Stop offset="0" stopColor={color} stopOpacity={0.1} />
-          <Stop offset="0.6" stopColor={color} stopOpacity={0.03} />
+          <Stop offset="0" stopColor={color} stopOpacity={0.2} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.05} />
           <Stop offset="1" stopColor={color} stopOpacity={0} />
         </RadialGradient>
       </Defs>

@@ -57,8 +57,7 @@ export function SavingsCard({ summary, onPress }: SavingsCardProps) {
           };
 
   return (
-    <Card radius="xl" padding="xl" style={styles.clip}>
-      <SavingsBloom color={accent} />
+    <Card radius="xl" padding="xl" style={styles.clip} backdrop={<SavingsBloom color={accent} />}>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
@@ -159,11 +158,8 @@ function SavingsBloom({ color }: { color: string }) {
     >
       <Defs>
         <RadialGradient id="savingsBloom" cx="50%" cy="50%" r="50%">
-          {/* Capped: this bloom sits over glass that is itself over the ambient
-          field, and the two together were taking captions on this card under
-          AA. What shows inside the card was always the falloff anyway. */}
-          <Stop offset="0" stopColor={color} stopOpacity={0.1} />
-          <Stop offset="0.6" stopColor={color} stopOpacity={0.03} />
+          <Stop offset="0" stopColor={color} stopOpacity={0.14} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.035} />
           <Stop offset="1" stopColor={color} stopOpacity={0} />
         </RadialGradient>
       </Defs>
