@@ -15,6 +15,10 @@ export type BreakdownEntry = {
   label: string;
   color: string;
   amount: Paise;
+  /** The category's group, carried through for the legend's second line. */
+  group?: string;
+  /** Icon name from the registry, carried through for the legend's avatar. */
+  icon?: string;
 };
 
 export type BreakdownOptions = {
@@ -53,6 +57,8 @@ export function toBreakdown(
     color: entry.color,
     amount: entry.amount,
     share: entry.amount / total,
+    group: entry.group,
+    icon: entry.icon,
   }));
 
   const accounted = headline.reduce((sum, slice) => sum + slice.amount, 0);

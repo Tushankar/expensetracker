@@ -2,8 +2,9 @@ import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from '
 import Animated, { interpolateColor, useAnimatedStyle } from 'react-native-reanimated';
 
 import { tapFeedback } from '@/utils/haptics';
-import { useTheme, type Theme, type TypeVariant } from '@/theme';
+import { useTheme, type GlassTone, type Theme, type TypeVariant } from '@/theme';
 
+import { GlassFill, Gloss, PressWash } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 import { usePressAnimation } from './usePressAnimation';
@@ -87,6 +88,17 @@ type VariantSpec = {
   backgroundPressed: string;
   foreground: string;
   borderColor?: string;
+  /**
+   * Draw this variant as glass instead of as a fill. The button then keeps a
+   * transparent background and the material shows through it — which is why the
+   * pressed colour is irrelevant for these, and a press wash handles it instead.
+   */
+  glass?: GlassTone;
+  /**
+   * Glass optics over an opaque fill. For the variants that have to stay solid
+   * because they are the one thing on the screen you are meant to press.
+   */
+  gloss?: 'soft' | 'bright';
 };
 
 function variantSpec(variant: ButtonVariant, theme: Theme): VariantSpec {
@@ -97,37 +109,44 @@ function variantSpec(variant: ButtonVariant, theme: Theme): VariantSpec {
         background: colors.brand,
         backgroundPressed: colors.brandPressed,
         foreground: colors.textOnAccent,
+        gloss: 'bright',
       };
     case 'secondary':
       return {
-        background: colors.surface,
-        backgroundPressed: colors.surfaceMuted,
+        background: 'transparent',
+        backgroundPressed: 'transparent',
         foreground: colors.textPrimary,
-        borderColor: colors.borderStrong,
+        glass: 'regular',
       };
     case 'tonal':
       return {
-        background: colors.brandSurface,
-        backgroundPressed: colors.surfaceStrong,
+        background: 'transparent',
+        backgroundPressed: 'transparent',
         foreground: colors.brandText,
+        glass: 'brand',
       };
     case 'ghost':
       return {
         background: 'transparent',
-        backgroundPressed: colors.surfaceMuted,
+        backgroundPressed: 'transparent',
         foreground: colors.textPrimary,
+        // No material at rest: a ghost button is a word until you touch it, and
+        // then the glass forms under your finger.
       };
     case 'destructive':
       return {
         background: colors.negative,
         backgroundPressed: colors.negative,
         foreground: colors.textOnAccent,
+        gloss: 'bright',
       };
     default:
       return {
         background: colors.inverse,
         backgroundPressed: colors.inversePressed,
         foreground: colors.textOnAccent,
+        // The only white surface in the app. A white sheen over it would be
+        // invisible and a dark one would dirty it, so it stays as it is.
       };
   }
 }
@@ -200,7 +219,9 @@ export function Button({
       <Animated.View
         style={[
           styles.base,
-          backgroundStyle,
+          // A glass variant keeps its background transparent so the material
+          // underneath is what you see; only a fill animates its colour.
+          palette.glass ? null : backgroundStyle,
           animatedStyle,
           {
             height: spec.height,
@@ -213,6 +234,14 @@ export function Button({
           },
         ]}
       >
+        {palette.glass ? <GlassFill tone={palette.glass} radius={spec.radius} /> : null}
+        {palette.gloss ? <Gloss radius={spec.radius} strength={palette.gloss} /> : null}
+        {/* Fills already interpolate their own pressed colour; the glass and ghost
+            variants have nothing to interpolate, so the press is a wash. */}
+        {palette.glass || variant === 'ghost' ? (
+          <PressWash progress={progress} radius={spec.radius} />
+        ) : null}
+
         {loading ? (
           <View style={[StyleSheet.absoluteFill, styles.noTouch]}>
             <View style={styles.center}>
@@ -253,6 +282,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // Clips the glass, the gloss and the press wash to the button's corners.
+    overflow: 'hidden',
   },
   content: {
     flexDirection: 'row',

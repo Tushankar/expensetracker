@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
+import { useTheme } from '@/theme';
+
 export type SparklineProps = {
   /** Raw series, any scale. At least two points. */
   data: readonly number[];
@@ -15,12 +17,23 @@ export type SparklineProps = {
 };
 
 /**
+ * Where the highlight sits relative to the line, in points.
+ *
+ * Above it, at a low alpha: the same lit top edge every glass surface in the app
+ * carries, following a curve instead of a rectangle.
+ */
+const HIGHLIGHT_OFFSET = -1.5;
+
+/**
  * The trend line behind the balance. Decorative: it sets the mood of the card and
  * carries no labels, so it is hidden from screen readers and the figures beside it
  * do the informing.
  *
  * Smoothed with a horizontal-tangent cubic through each pair of points, which keeps
  * the curve from overshooting the way a Catmull-Rom spline does on spiky data.
+ *
+ * The fill under it is graded in three stops rather than two, so it reads as a
+ * wedge of tinted glass resting on the card rather than as a colour fading out.
  */
 export function Sparkline({
   data,
@@ -31,6 +44,8 @@ export function Sparkline({
   strokeWidth = 2,
   gradientId = 'sparkline',
 }: SparklineProps) {
+  const theme = useTheme();
+
   const { line, area } = useMemo(() => {
     if (data.length < 2) return { line: '', area: '' };
 
@@ -76,7 +91,11 @@ export function Sparkline({
     >
       <Defs>
         <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity={0.28} />
+          <Stop offset="0" stopColor={color} stopOpacity={0.34} />
+          {/* The mid stop is what gives the fill a body. Two stops fade evenly
+              and read as a gradient; three hold their colour near the line and
+              then let go, which is how a translucent solid behaves. */}
+          <Stop offset="0.45" stopColor={color} stopOpacity={0.12} />
           <Stop offset="1" stopColor={color} stopOpacity={0} />
         </LinearGradient>
       </Defs>
@@ -89,6 +108,15 @@ export function Sparkline({
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
+      />
+      <Path
+        d={line}
+        stroke={theme.glass.regular.highlight}
+        strokeWidth={1}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        translateY={HIGHLIGHT_OFFSET}
       />
     </Svg>
   );

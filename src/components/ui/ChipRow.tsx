@@ -3,6 +3,7 @@ import { Pressable, ScrollView, View, type ViewStyle } from 'react-native';
 import { useTheme } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
+import { GlassFill } from './GlassSurface';
 import { Text } from './Text';
 
 export type Chip<T extends string> = {
@@ -26,6 +27,9 @@ export type ChipRowProps<T extends string> = {
  *
  * Scrolling rather than squeezing: five ranges cannot fit a phone width at a
  * readable size, and a row that scrolls is better than one nobody can read.
+ *
+ * Selection is a change of material, not just of colour: the chosen chip is a
+ * bead of accent glass with a brand rim, the rest are thin and unlit.
  */
 export function ChipRow<T extends string>({
   options,
@@ -64,12 +68,16 @@ export function ChipRow<T extends string>({
                 height: 36,
                 justifyContent: 'center',
                 borderRadius: theme.radius.pill,
-                backgroundColor: selected ? theme.colors.brandSurface : theme.colors.surface,
-                borderWidth: theme.layout.hairline,
-                borderColor: selected ? theme.colors.brand : theme.colors.border,
+                overflow: 'hidden',
               }}
               hitSlop={{ top: 6, bottom: 6 }}
             >
+              <GlassFill
+                tone={selected ? 'brand' : 'thin'}
+                radius="pill"
+                rimColor={selected ? theme.colors.brand : undefined}
+                sheen={!selected}
+              />
               <Text
                 variant="labelSm"
                 color={selected ? theme.colors.brandText : theme.colors.textSecondary}

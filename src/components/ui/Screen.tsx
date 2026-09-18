@@ -29,9 +29,14 @@ export type ScreenProps = {
 };
 
 /**
- * Every screen's outer shell: themed background, safe areas, the shared gutter and
- * a max content width so the layout does not stretch into unreadable lines on
- * tablets or the web build.
+ * Every screen's outer shell: safe areas, the shared gutter and a max content
+ * width so the layout does not stretch into unreadable lines on tablets or the
+ * web build.
+ *
+ * It paints nothing. The background is the app-wide ambient colour field mounted
+ * above the window in `AmbientBackground`, and every surface on the screen is a
+ * piece of glass floating over it — so a screen that painted its own fill would
+ * flatten the whole effect.
  */
 export function Screen({
   children,
@@ -62,17 +67,14 @@ export function Screen({
 
   if (!scroll) {
     return (
-      <View
-        testID={testID}
-        style={[styles.root, { backgroundColor: theme.colors.background }, style]}
-      >
+      <View testID={testID} style={[styles.root, style]}>
         <View style={[content, styles.flex, scrollPadding, contentContainerStyle]}>{children}</View>
       </View>
     );
   }
 
   return (
-    <View testID={testID} style={[styles.root, { backgroundColor: theme.colors.background }, style]}>
+    <View testID={testID} style={[styles.root, style]}>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[content, scrollPadding, contentContainerStyle]}

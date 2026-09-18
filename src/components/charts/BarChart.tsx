@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Text } from '@/components/ui';
+import { GlassFill, Gloss, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
 
 export type Bar = {
@@ -42,11 +42,17 @@ export type BarChartProps = {
 };
 
 /**
- * Vertical bars with modern pill tracks and interactive selection.
+ * Vertical bars in glass tracks, with interactive selection.
  *
- * Each bar sits inside a subtle track pill so empty/quiet days have visual
- * structure rather than disappearing into voids, and few bars never stretch
- * into giant solid blocks.
+ * Each bar sits inside a recessed pill of the same material as everything else on
+ * the card, so a quiet day is an empty channel rather than a void — you can see
+ * the slot the bar would have filled. Selecting one swaps its channel for accent
+ * glass, which is the only colour change in the whole chart and therefore
+ * unmissable.
+ *
+ * The bars themselves keep their category hue and take the light over the top of
+ * it: lit along the cap, shaded at the foot. A chart of forty backdrop filters
+ * would cost far more than it showed, so none of these blur.
  */
 export function BarChart({
   data,
@@ -111,23 +117,27 @@ export function BarChart({
                 alignItems: 'center',
               }}
             >
-              {/* Background Track Pill */}
+              {/* The channel the bar grows in. */}
               <View
                 style={{
                   width: '100%',
                   height: '100%',
                   borderRadius: barRadius,
-                  backgroundColor: isSelected
-                    ? theme.colors.surfaceStrong
-                    : showTrack
-                      ? theme.colors.surfaceMuted
-                      : 'transparent',
                   justifyContent: 'flex-end',
                   overflow: 'hidden',
-                  borderWidth: isSelected ? 1 : 0,
-                  borderColor: isSelected ? theme.colors.brand : 'transparent',
                 }}
               >
+                {isSelected ? (
+                  <GlassFill
+                    tone="brand"
+                    radius={barRadius}
+                    rimColor={theme.colors.brand}
+                    sheen={false}
+                  />
+                ) : showTrack ? (
+                  <GlassFill tone="ultraThin" radius={barRadius} sheen={false} />
+                ) : null}
+
                 <GrowingBar
                   height={barHeight}
                   opacity={barOpacity}
@@ -233,14 +243,14 @@ function GrowingBar({
         style,
         {
           width: '100%',
-          borderTopLeftRadius: radius,
-          borderTopRightRadius: radius,
-          borderBottomLeftRadius: radius,
-          borderBottomRightRadius: radius,
+          borderRadius: radius,
           backgroundColor: color,
           opacity,
+          overflow: 'hidden',
         },
       ]}
-    />
+    >
+      <Gloss radius={radius} />
+    </Animated.View>
   );
 }

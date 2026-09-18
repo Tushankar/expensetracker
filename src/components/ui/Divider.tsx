@@ -11,6 +11,9 @@ export type DividerProps = {
 /**
  * A true hairline. `StyleSheet.hairlineWidth` disappears on some Android densities,
  * so this uses a 1dp line in a low-contrast colour instead.
+ *
+ * `colors.divider` is translucent white, so the line is a scratch of light across
+ * whatever it is drawn on rather than a grey that only works on one surface.
  */
 export function Divider({ inset = 0, style }: DividerProps) {
   const { colors, layout } = useTheme();

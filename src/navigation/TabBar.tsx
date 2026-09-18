@@ -8,7 +8,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Icon, Text, usePressAnimation, type IconName } from '@/components/ui';
+import {
+  GlassFill,
+  GlassSurface,
+  Gloss,
+  Icon,
+  Text,
+  usePressAnimation,
+  type IconName,
+} from '@/components/ui';
 import { useTheme } from '@/theme';
 import { mediumFeedback, tapFeedback } from '@/utils/haptics';
 
@@ -43,6 +51,11 @@ export type TabBarProps = BottomTabBarProps & {
  *
  * The add button is an action, not a route — it sits in a gap between the second
  * and third tabs rather than being a fifth screen.
+ *
+ * The bar itself is the heaviest glass in the app. It has a whole scrolling screen
+ * passing underneath it, which is the one place where a thin material would leave
+ * a caption competing with a chart, and the one place where the blur is genuinely
+ * showing you something: you can see where the content has got to.
  */
 export function TabBar({ state, descriptors, navigation, onAddPress }: TabBarProps) {
   const theme = useTheme();
@@ -84,20 +97,13 @@ export function TabBar({ state, descriptors, navigation, onAddPress }: TabBarPro
   return (
     // box-none lets taps fall through the transparent strip beside the add button.
     <View style={{ height: barHeight + FAB_OVERHANG, pointerEvents: 'box-none' }}>
-      {/* The painted bar, inset from the top so the overhang strip stays clear. */}
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            pointerEvents: 'none',
-            top: FAB_OVERHANG,
-            backgroundColor: theme.colors.surface,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: theme.colors.border,
-            borderTopLeftRadius: theme.radius.xl,
-            borderTopRightRadius: theme.radius.xl,
-          },
-        ]}
+      {/* The glass bar, inset from the top so the overhang strip stays clear. Round
+          across the top, square along the bottom where it meets the screen edge. */}
+      <GlassSurface
+        tone="chrome"
+        shadow="lg"
+        corners={{ topLeft: theme.radius.xl, topRight: theme.radius.xl }}
+        style={[StyleSheet.absoluteFill, styles.noTouch, { top: FAB_OVERHANG }]}
       />
 
       <View
@@ -144,7 +150,7 @@ function TabButton({ icon, label, focused, onPress }: TabButtonProps) {
     transform: [{ translateY: -lift.value * 2 }],
   }));
 
-  const color = focused ? theme.colors.brand : theme.colors.textTertiary;
+  const color = focused ? theme.colors.brandText : theme.colors.textTertiary;
 
   return (
     <Pressable
@@ -154,17 +160,11 @@ function TabButton({ icon, label, focused, onPress }: TabButtonProps) {
       accessibilityState={{ selected: focused }}
       style={styles.tab}
     >
-      <Animated.View
-        style={[
-          iconStyle,
-          {
-            paddingHorizontal: 14,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: focused ? theme.colors.brandSurface : 'transparent',
-          },
-        ]}
-      >
+      <Animated.View style={[iconStyle, styles.tabPill]}>
+        {/* The selected tab gets its own lozenge of accent glass, sitting on the
+            bar glass. Two thin materials rather than one thick one, so the pill
+            reads as a highlight on the bar and not as a hole cut through it. */}
+        {focused ? <GlassFill tone="brand" radius="pill" sheen={false} /> : null}
         <Icon name={icon} size={21} color={color} strokeWidth={focused ? 2.2 : 1.9} />
       </Animated.View>
       <Text
@@ -213,6 +213,12 @@ function AddButton({ onPress }: { onPress: () => void }) {
           },
         ]}
       >
+        {/* The one button on the screen that stays solid: it is the primary action
+            and it has to read at a glance against anything scrolling behind it.
+            What it borrows from the glass is the optics — a lit top edge, a
+            diagonal sheen, and a shaded underside, so a flat circle of brand
+            colour becomes a bead of it. */}
+        <Gloss radius={FAB_SIZE / 2} strength="bright" />
         <Icon name="plus" size={26} color={theme.colors.textOnAccent} strokeWidth={2.4} />
       </Animated.View>
     </Pressable>
@@ -220,6 +226,7 @@ function AddButton({ onPress }: { onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  noTouch: { pointerEvents: 'none' },
   passThrough: { pointerEvents: 'box-none' },
   tab: {
     flex: 1,
@@ -230,6 +237,13 @@ const styles = StyleSheet.create({
     // Keeps the whole column tappable, not just the glyph.
     paddingTop: 2,
     minHeight: 44,
+  },
+  tabPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: { textAlign: 'center' },
   fabWrap: {
@@ -245,5 +259,6 @@ const styles = StyleSheet.create({
     borderRadius: FAB_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
 });

@@ -1,3 +1,4 @@
+import { sheenWhite, withAlpha } from './alpha';
 import {
   accents,
   actionHues,
@@ -15,6 +16,17 @@ import {
 /**
  * Semantic colour tokens. Every component reads from this shape, never from the
  * raw palette, so swapping the accent recolours the whole app at once.
+ *
+ * Every surface and every edge in here is translucent. That is the single change
+ * that made the glass go all the way down: a component that writes
+ * `backgroundColor: colors.surfaceMuted` is now painting a pane of tinted glass
+ * over the ambient colour field, without knowing anything about it. Anything that
+ * wants the full material — a real backdrop blur, a sheen, a lit rim — reaches for
+ * `GlassSurface` instead, and the two agree because the alphas were chosen
+ * together.
+ *
+ * The one token that stays opaque is `background`. It is the bottom of the stack,
+ * and something has to be.
  */
 export type ColorTokens = {
   background: string;
@@ -78,14 +90,23 @@ export type ColorTokens = {
 function build(accent: AccentSpec): ColorTokens {
   return {
     background: accent.ink.canvas,
-    surface: accent.ink.surface,
-    surfaceElevated: accent.ink.elevated,
-    surfaceMuted: accent.ink.muted,
-    surfaceStrong: accent.ink.strong,
 
-    border: accent.ink.strong,
-    borderStrong: accent.ink.border,
-    divider: accent.ink.muted,
+    // The ink ramp, held back from opacity. Each one keeps the hue and the
+    // lightness it always had — which is what keeps body text and captions
+    // reading exactly as they did — and lets the field behind it through.
+    // A muted panel is the most transparent of the four because it is almost
+    // always sitting inside something that is already tinted.
+    surface: withAlpha(accent.ink.surface, 0.82),
+    surfaceElevated: withAlpha(accent.ink.elevated, 0.85),
+    surfaceMuted: withAlpha(accent.ink.muted, 0.62),
+    surfaceStrong: withAlpha(accent.ink.strong, 0.78),
+
+    // Edges are white rather than a lighter grey. On a translucent surface a
+    // grey border has to compete with whatever is showing through, while a
+    // white one always reads as the lit edge of the pane.
+    border: sheenWhite(0.12),
+    borderStrong: sheenWhite(0.2),
+    divider: sheenWhite(0.07),
 
     textPrimary: '#FFFFFF',
     textSecondary: accent.textSecondary,
@@ -94,7 +115,9 @@ function build(accent: AccentSpec): ColorTokens {
 
     brand: accent.brand,
     brandPressed: accent.brandPressed,
-    brandSurface: accent.brandSurface,
+    // Accent glass: the brand colour itself at low alpha, rather than a dark
+    // slab pre-mixed with it, so it picks up whatever it is laid over.
+    brandSurface: withAlpha(accent.brandText, 0.16),
     brandText: accent.brandText,
     brandGlow: accent.brandGlow,
 
@@ -115,15 +138,18 @@ function build(accent: AccentSpec): ColorTokens {
     heroBorder: accent.heroBorder,
     heroText: '#FFFFFF',
     heroTextMuted: accent.heroTextMuted,
-    heroTile: accent.heroTile,
-    heroTileBorder: 'rgba(255, 255, 255, 0.08)',
+    // A tile on the hero slab is glass on glass, so it is a white wash rather
+    // than its own colour — a second saturated fill there just muddies the one
+    // underneath it.
+    heroTile: sheenWhite(0.1),
+    heroTileBorder: sheenWhite(0.16),
     heroPositive: money.in,
     heroNegative: money.out,
 
-    overlay: 'rgba(3, 2, 6, 0.72)',
-    skeleton: accent.ink.muted,
-    skeletonHighlight: accent.ink.strong,
-    ripple: 'rgba(255, 255, 255, 0.06)',
+    overlay: withAlpha(accent.ink.canvas, 0.72),
+    skeleton: withAlpha(accent.ink.muted, 0.6),
+    skeletonHighlight: sheenWhite(0.08),
+    ripple: sheenWhite(0.06),
     focusRing: accent.brandText,
   };
 }

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
+import { GlassFill } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
@@ -96,13 +97,14 @@ export function Toast({ message, detail, tone = 'success', duration = 2600, onDi
             paddingHorizontal: theme.spacing.lg,
             paddingVertical: theme.spacing.md,
             borderRadius: theme.radius.md,
-            borderWidth: theme.layout.hairline,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.surfaceElevated,
+            overflow: 'hidden',
           },
           theme.shadows.lg,
         ]}
       >
+        {/* Thick rather than chrome: it floats free of any edge, and it has to stay
+            readable over whatever it happens to land on. */}
+        <GlassFill tone="thick" radius="md" />
         <Icon name={TONE_ICON[tone]} size={18} color={accent} strokeWidth={2.2} />
         <View style={{ flexShrink: 1, gap: 2 }}>
           <Text variant="labelSm" numberOfLines={1}>

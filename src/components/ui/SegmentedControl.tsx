@@ -11,6 +11,7 @@ import Animated, {
 import { useTheme } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
+import { GlassFill } from './GlassSurface';
 import { Text } from './Text';
 
 export type SegmentOption<T extends string> = {
@@ -35,6 +36,11 @@ const TRACK_HEIGHT = 44;
  * The thumb is positioned from a measured track width rather than percentages,
  * because a percentage translate would ignore the track's inner padding and drift
  * a couple of points off at the ends.
+ *
+ * Track and thumb are two rungs of the same glass: a recessed pane, and a thicker
+ * bead of the material riding in it. That difference in thickness is what makes
+ * the thumb look like it is *on* the track rather than painted into it, which a
+ * pair of flat greys never quite manages.
  */
 export function SegmentedControl<T extends string>({
   options,
@@ -78,11 +84,13 @@ export function SegmentedControl<T extends string>({
           height: TRACK_HEIGHT,
           padding: TRACK_PADDING,
           borderRadius: theme.radius.sm,
-          backgroundColor: theme.colors.surfaceMuted,
+          overflow: 'hidden',
         },
         style,
       ]}
     >
+      <GlassFill tone="thin" radius="sm" sheen={false} />
+
       {segmentWidth > 0 ? (
         <Animated.View
           style={[
@@ -95,11 +103,11 @@ export function SegmentedControl<T extends string>({
               left: TRACK_PADDING,
               width: segmentWidth,
               height: TRACK_HEIGHT - TRACK_PADDING * 2,
-              borderRadius: theme.radius.xs + 2,
-              backgroundColor: theme.colors.surface,
             },
           ]}
-        />
+        >
+          <GlassFill tone="thick" radius={theme.radius.xs + 2} />
+        </Animated.View>
       ) : null}
 
       {options.map((option) => {

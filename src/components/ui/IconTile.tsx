@@ -3,6 +3,7 @@ import { View, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
 
+import { Gloss } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 
 export type IconTileProps = {
@@ -20,8 +21,13 @@ const GLYPH = { sm: 17, md: 20, lg: 24 } as const;
  * Rounded, tinted container for a category or account glyph. Used in transaction
  * rows and category lists so every row has the same visual anchor on the left.
  *
- * The fill is the accent at ~14% so tiles stay quiet next to the amount, which is
+ * The fill is the accent at ~18% so tiles stay quiet next to the amount, which is
  * the thing the eye should actually land on.
+ *
+ * Tinted rather than blurred, deliberately: a list of forty transaction rows is
+ * forty of these, and forty backdrop filters is a frame budget spent on something
+ * 36 points across. It gets the light instead — a lit top edge and a diagonal
+ * sweep — so it still reads as a bead of the same material.
  */
 export const IconTile = memo(function IconTile({
   name,
@@ -45,10 +51,12 @@ export const IconTile = memo(function IconTile({
           backgroundColor: withAlpha(accent, 0.18),
           alignItems: 'center',
           justifyContent: 'center',
+          overflow: 'hidden',
         },
         style,
       ]}
     >
+      <Gloss radius="sm" />
       <Icon name={name} size={GLYPH[size]} color={accent} />
     </View>
   );

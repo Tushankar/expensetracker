@@ -73,8 +73,11 @@ export function RootNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.background },
-        headerStyle: { backgroundColor: theme.colors.background },
+        // Both transparent so the ambient field reads continuously from the status
+        // bar to the tab bar. A pushed screen that painted its own background
+        // would cut a flat rectangle out of it.
+        contentStyle: { backgroundColor: 'transparent' },
+        headerStyle: { backgroundColor: 'transparent' },
         headerShadowVisible: false,
         headerTintColor: theme.colors.textPrimary,
         // The native header takes a flat style object, so the scale is read from

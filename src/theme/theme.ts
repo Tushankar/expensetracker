@@ -1,4 +1,5 @@
 import { colorsByAccent, type ColorTokens } from './colors';
+import { glassByAccent, type GlassTokens } from './glass';
 import { duration, easing, pressScale, spring } from './motion';
 import { accents, type AccentId } from './palette';
 import { radius } from './radius';
@@ -12,6 +13,8 @@ export type Theme = {
   accent: AccentId;
   accentLabel: string;
   colors: ColorTokens;
+  /** Liquid-glass materials. Read by `GlassSurface`, rarely by anything else. */
+  glass: GlassTokens;
   shadows: Shadows;
   spacing: typeof spacing;
   layout: typeof layout;
@@ -42,6 +45,7 @@ function make(accent: AccentId): Theme {
     accent,
     accentLabel: accents[accent].label,
     colors: colorsByAccent[accent],
+    glass: glassByAccent[accent],
     ...shared,
   };
 }

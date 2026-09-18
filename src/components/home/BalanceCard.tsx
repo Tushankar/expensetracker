@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
-import { AnimatedAmount, Icon, Text, withAlpha } from '@/components/ui';
+import { AnimatedAmount, GlassFill, Gloss, Icon, Text, withAlpha } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
 import { formatINR, percentChange } from '@/utils/currency';
@@ -23,8 +23,14 @@ export type BalanceCardProps = {
  * The screen's anchor: one very large number, the period it covers, and the
  * shape of the money that moved through it.
  *
- * This is the only saturated surface in the app. Everything around it is a flat
- * card, which is what lets a single slab carry the hierarchy on its own.
+ * This is the deepest, most saturated surface in the app. Everything around it is
+ * a thinner pane of the same material, which is what lets a single slab carry the
+ * hierarchy on its own.
+ *
+ * It is glass over a gradient rather than glass alone: the gradient is what gives
+ * the slab a colour of its own, and the material over it is what ties it to every
+ * other surface on the screen. On iOS 26 that material is real Liquid Glass, so
+ * the deepest card in the app is also the one that moves with the light.
  *
  * The balance is every active account added together, and it is the one figure
  * here that is not period-scoped — money you have is money you have, whichever
@@ -56,16 +62,15 @@ export function BalanceCard({
         theme.shadows.md,
         {
           borderRadius: theme.radius.xl,
-          borderWidth: theme.layout.hairline,
-          borderColor: theme.colors.heroBorder,
-          // A lighter top edge reads as a light source above the slab.
-          borderTopColor: 'rgba(255, 255, 255, 0.16)',
           overflow: 'hidden',
           padding: theme.spacing.xl,
         },
       ]}
     >
+      {/* Laid over the gradient, under everything else: the bloom is part of what
+          the glass above it has to refract. */}
       <BalanceBloom color={theme.colors.brandText} />
+      <GlassFill tone="hero" radius="xl" rimColor={theme.colors.heroBorder} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <Pressable
@@ -225,12 +230,12 @@ export function BalanceCard({
           height: 10,
           marginTop: theme.spacing.xl,
           borderRadius: 5,
-          backgroundColor: theme.colors.heroTile,
-          borderWidth: theme.layout.hairline,
-          borderColor: theme.colors.heroTileBorder,
           overflow: 'hidden',
         }}
       >
+        {/* The channel the two shares sit in, cut into the slab. */}
+        <GlassFill tone="thin" radius={5} sheen={false} />
+
         {summary.income > 0 ? (
           <View
             style={{
@@ -240,8 +245,11 @@ export function BalanceCard({
               minWidth: 5,
               borderRadius: 5,
               backgroundColor: theme.colors.heroPositive,
+              overflow: 'hidden',
             }}
-          />
+          >
+            <Gloss radius={5} rim={false} />
+          </View>
         ) : null}
         {summary.spent > 0 ? (
           <View
@@ -251,8 +259,11 @@ export function BalanceCard({
               minWidth: 5,
               borderRadius: 5,
               backgroundColor: theme.colors.heroNegative,
+              overflow: 'hidden',
             }}
-          />
+          >
+            <Gloss radius={5} rim={false} />
+          </View>
         ) : null}
       </View>
 

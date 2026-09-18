@@ -9,6 +9,15 @@ export {
   type CategoryHue,
   type ColorTokens,
 } from './colors';
+export { flatten, shadeBlack, sheenWhite, withAlpha } from './alpha';
+export {
+  glassByAccent,
+  type GlassLayer,
+  type GlassTokens,
+  type GlassTone,
+  type Gloss,
+  type GlossStrength,
+} from './glass';
 export {
   accentList,
   accents,

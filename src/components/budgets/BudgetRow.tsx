@@ -9,7 +9,7 @@ import Animated, {
 
 import type { BudgetProgress, BudgetState } from '@/api/types';
 import { toIconName } from '@/components/icons/registry';
-import { Icon, IconTile, Text, withAlpha } from '@/components/ui';
+import { GlassFill, Gloss, Icon, IconTile, Text, withAlpha } from '@/components/ui';
 import { categoryColor, useTheme, type Theme } from '@/theme';
 import { formatINR } from '@/utils/currency';
 import { tapFeedback } from '@/utils/haptics';
@@ -141,12 +141,23 @@ export function BudgetRow({ budget, onPress, compact = false }: BudgetRowProps) 
             height: 8,
             borderRadius: 4,
             overflow: 'hidden',
-            backgroundColor: theme.colors.surfaceStrong,
           }}
         >
+          <GlassFill tone="thin" radius={4} sheen={false} />
+
           <Animated.View
-            style={[fillStyle, { height: '100%', borderRadius: 4, backgroundColor: accent }]}
-          />
+            style={[
+              fillStyle,
+              {
+                height: '100%',
+                borderRadius: 4,
+                backgroundColor: accent,
+                overflow: 'hidden',
+              },
+            ]}
+          >
+            <Gloss radius={4} rim={false} />
+          </Animated.View>
           {/* Where the alert fires, on the same track it will fire about. */}
           <View
             style={{

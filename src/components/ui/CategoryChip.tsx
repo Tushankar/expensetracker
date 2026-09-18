@@ -2,6 +2,7 @@ import { View, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
 
+import { Gloss } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 import { withAlpha } from './IconTile';
@@ -21,6 +22,9 @@ export type CategoryChipProps = {
 /**
  * Category tag on a transaction row: the glyph in the category's colour over the
  * same colour at low opacity. Reads at a glance without competing with the amount.
+ *
+ * Tinted rather than blurred. A long list is hundreds of these, and at eleven
+ * points tall the light along the top edge is all the glass anyone can see.
  */
 export function CategoryChip({ label, icon, color, iconOnly = false, style }: CategoryChipProps) {
   const theme = useTheme();
@@ -38,10 +42,12 @@ export function CategoryChip({ label, icon, color, iconOnly = false, style }: Ca
           paddingVertical: 5,
           borderRadius: theme.radius.pill,
           backgroundColor: withAlpha(color, 0.14),
+          overflow: 'hidden',
         },
         style,
       ]}
     >
+      <Gloss radius="pill" />
       <Icon name={icon} size={iconOnly ? 13 : 11} color={color} strokeWidth={2.2} />
       {iconOnly ? null : (
         <Text

@@ -16,6 +16,7 @@ import Animated, {
 
 import { useTheme } from '@/theme';
 
+import { GlassFill } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
@@ -48,6 +49,10 @@ export type InputProps = Omit<TextInputProps, 'style'> & {
  * The border animates between rest / focus / error rather than switching instantly,
  * which is the difference between a field that feels responsive and one that feels
  * like a web form.
+ *
+ * The field is a recessed pane of glass, and the rim is the only thing that moves:
+ * the material stays exactly as it is from rest to focus, so the eye is drawn to
+ * the one edge that changed rather than to the whole box lighting up.
  */
 export const Input = forwardRef<TextInput, InputProps>(function Input(
   {
@@ -94,7 +99,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   );
 
   // Error colour is applied outside the animation so it wins immediately.
-  const restBorder = theme.colors.border;
+  const restBorder = theme.glass.thin.border;
   const activeBorder = theme.colors.brand;
 
   const borderStyle = useAnimatedStyle(() => ({
@@ -121,12 +126,23 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
             gap: theme.spacing.md,
             borderRadius: theme.radius.md,
             borderWidth: theme.layout.hairline,
-            backgroundColor: editable ? theme.colors.surface : theme.colors.surfaceMuted,
             opacity: editable ? 1 : 0.6,
+            overflow: 'hidden',
           },
           hasError && { borderColor: theme.colors.negative },
         ]}
       >
+        {/* Thinner when the field is read-only, so a disabled row recedes into the
+            card instead of looking like something you have failed to tap. */}
+        <GlassFill
+          tone={editable ? 'thin' : 'ultraThin'}
+          radius="md"
+          // The animated border above is this surface's rim; a second one from the
+          // material would double the hairline and stop it animating.
+          rim={false}
+          sheen={false}
+        />
+
         {leftIcon ? (
           <Icon
             name={leftIcon}

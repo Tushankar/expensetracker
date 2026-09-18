@@ -1,3 +1,4 @@
+export { AmbientBackground, type AmbientBackgroundProps } from './AmbientBackground';
 export { AnimatedAmount, type AnimatedAmountProps } from './AnimatedAmount';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
@@ -9,6 +10,19 @@ export { ChipRow, type Chip, type ChipRowProps } from './ChipRow';
 export { Divider } from './Divider';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorState, type ErrorStateProps } from './ErrorState';
+export {
+  GlassBackdropProvider,
+  GlassFill,
+  GlassSurface,
+  Gloss,
+  PressWash,
+  useGlassBackdrop,
+  useGlassMode,
+  type GlassMode,
+  type GlassSurfaceProps,
+  type GlossProps,
+  type PressWashProps,
+} from './GlassSurface';
 export { Icon, type IconName, type IconProps } from './Icon';
 export { IconButton, type IconButtonProps } from './IconButton';
 export { IconTile, withAlpha, type IconTileProps } from './IconTile';

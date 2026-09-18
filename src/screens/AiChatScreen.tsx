@@ -140,7 +140,9 @@ export function AiChatScreen() {
   const canSend = draft.trim().length > 0 && !ask.isPending;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    // Unpainted, like every other screen: the ambient field shows through and the
+    // header and composer blur it as the thread slides between them.
+    <View style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -156,9 +158,11 @@ export function AiChatScreen() {
             paddingHorizontal: theme.spacing.sm,
             borderBottomWidth: theme.layout.hairline,
             borderBottomColor: theme.colors.border,
-            backgroundColor: theme.colors.background,
+            overflow: 'hidden',
           }}
         >
+          <GlassFill tone="chrome" radius={0} rim={false} />
+
           <IconButton
             name="chevronLeft"
             accessibilityLabel="Go back"
@@ -276,11 +280,13 @@ export function AiChatScreen() {
           style={{
             borderTopWidth: theme.layout.hairline,
             borderTopColor: theme.colors.border,
-            backgroundColor: theme.colors.background,
             paddingTop: theme.spacing.md,
             paddingBottom: Math.max(insets.bottom, theme.spacing.md),
+            overflow: 'hidden',
           }}
         >
+          <GlassFill tone="chrome" radius={0} rim={false} />
+
           {/* Follow-ups, offered only while the box is empty so they never
               compete with something half-typed. */}
           {!empty && draft.length === 0 ? (

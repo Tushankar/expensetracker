@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
@@ -22,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
+import { GlassBackdropProvider, GlassSurface, useGlassBackdrop } from './GlassSurface';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
@@ -60,6 +62,12 @@ const DISMISS_VELOCITY = 900;
  * It owns its own mount lifecycle. `visible` going false starts the exit animation
  * and only then unmounts the native `Modal`, otherwise the sheet would vanish
  * instantly instead of sliding away.
+ *
+ * The sheet is the app's thickest glass and the scrim behind it is blurred too, so
+ * what you get on the way in is the screen you were on receding out of focus
+ * rather than being covered over. On Android the scrim stays a flat wash and the
+ * sheet falls back to a solid fill: a modal there is its own native window, and a
+ * blur cannot reach across into the window it is sitting on top of.
  */
 export function BottomSheet({
   visible,
@@ -77,6 +85,11 @@ export function BottomSheet({
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
+  const glassTarget = useGlassBackdrop();
+
+  // See the note on the sheet surface: Android cannot blur across windows, so the
+  // scrim there is a flat wash instead of the screen going out of focus.
+  const blurScrim = Platform.OS !== 'android';
 
   const [mounted, setMounted] = useState(visible);
 
@@ -169,9 +182,25 @@ export function BottomSheet({
       {/* A Modal is a separate native root on Android, so gestures inside it need
           their own provider. */}
       <GestureHandlerRootView style={styles.root}>
-        <Animated.View
-          style={[StyleSheet.absoluteFill, backdropStyle, { backgroundColor: theme.colors.overlay }]}
-        >
+        <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
+          {blurScrim ? (
+            <BlurView
+              style={StyleSheet.absoluteFill}
+              tint="systemChromeMaterialDark"
+              intensity={theme.glass.scrimIntensity}
+              pointerEvents="none"
+            />
+          ) : null}
+          {/* Painted over the blur rather than instead of it: the blur softens the
+              screen behind, and this is what keeps the sheet legible on top of a
+              bright chart. */}
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: blurScrim ? theme.glass.scrim : theme.colors.overlay },
+            ]}
+            pointerEvents="none"
+          />
           {/* Only a control when it actually does something. Announcing a
               "Close" button that a destructive confirmation deliberately
               ignores sends a screen-reader user somewhere that does not
@@ -194,91 +223,103 @@ export function BottomSheet({
         >
           <Animated.View
             accessibilityViewIsModal
-            style={[
-              sheetStyle,
-              styles.sheet,
-              theme.shadows.lg,
-              {
-                backgroundColor: theme.colors.surface,
-                borderTopLeftRadius: theme.radius.xxl,
-                borderTopRightRadius: theme.radius.xxl,
-                maxHeight: screenHeight * maxHeightRatio,
-                paddingBottom: Math.max(insets.bottom, theme.spacing.lg),
-              },
-            ]}
+            style={[sheetStyle, styles.sheet, { maxHeight: screenHeight * maxHeightRatio }]}
           >
-            {header ? (
-              <GestureDetector gesture={panGesture}>
-                <View style={{ paddingHorizontal: theme.spacing.xl }}>
-                  {showHandle ? (
-                    <View style={styles.handleRow}>
-                      <View
-                        style={{
-                          width: 40,
-                          height: 4,
-                          borderRadius: 2,
-                          backgroundColor: theme.colors.borderStrong,
-                        }}
-                      />
-                    </View>
-                  ) : (
-                    <View style={{ height: theme.spacing.lg }} />
-                  )}
-
-                  {title ? (
-                    <View style={[styles.titleRow, { marginBottom: theme.spacing.lg }]}>
-                      <View style={styles.titleText}>
-                        <Text variant="h2" numberOfLines={1}>
-                          {title}
-                        </Text>
-                        {subtitle ? (
-                          <Text variant="bodySm" tone="secondary" style={{ marginTop: 2 }}>
-                            {subtitle}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {headerAction}
-                      <IconButton
-                        name="close"
-                        onPress={onClose}
-                        accessibilityLabel="Close"
-                        variant="tonal"
-                        size="sm"
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              </GestureDetector>
-            ) : null}
-
-            <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={{
-                paddingHorizontal: theme.spacing.xl,
-                // The footer is pinned over this, so the last field needs room
-                // to clear it rather than ending flush against the button.
-                paddingBottom: footer ? theme.spacing.sm : 0,
-              }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              // iOS otherwise leaves the focused field under the keyboard when
-              // the sheet is tall enough to scroll.
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-            >
-              {children}
-            </ScrollView>
-
-            {footer ? (
-              <View
-                style={{
-                  paddingHorizontal: theme.spacing.xl,
-                  paddingTop: theme.spacing.lg,
-                }}
+            {/* A modal is its own native window, so the Android blur target that
+                lives behind the app cannot be sampled from in here. Cutting the
+                context puts every glass surface inside the sheet — including the
+                sheet — onto its solid fallback on that platform, rather than
+                letting `expo-blur` warn once per surface and degrade anyway. */}
+            <GlassBackdropProvider value={Platform.OS === 'android' ? null : glassTarget}>
+              <GlassSurface
+                tone="chrome"
+                shadow="lg"
+                corners={{ topLeft: theme.radius.xxl, topRight: theme.radius.xxl }}
+                style={[
+                  styles.sheetSurface,
+                  { paddingBottom: Math.max(insets.bottom, theme.spacing.lg) },
+                ]}
               >
-                {footer}
-              </View>
-            ) : null}
+              {header ? (
+                <GestureDetector gesture={panGesture}>
+                  <View style={{ paddingHorizontal: theme.spacing.xl }}>
+                    {showHandle ? (
+                      <View style={styles.handleRow}>
+                        {/* Lit along the top like every other glass edge, so the
+                            grabber reads as a bar of the same material and not as
+                            a grey rectangle sitting on it. */}
+                        <View
+                          style={{
+                            width: 40,
+                            height: 5,
+                            borderRadius: 3,
+                            backgroundColor: theme.glass.thick.fill,
+                            borderWidth: theme.layout.hairline,
+                            borderColor: theme.glass.thick.border,
+                            borderTopColor: theme.glass.thick.highlight,
+                          }}
+                        />
+                      </View>
+                    ) : (
+                      <View style={{ height: theme.spacing.lg }} />
+                    )}
+
+                    {title ? (
+                      <View style={[styles.titleRow, { marginBottom: theme.spacing.lg }]}>
+                        <View style={styles.titleText}>
+                          <Text variant="h2" numberOfLines={1}>
+                            {title}
+                          </Text>
+                          {subtitle ? (
+                            <Text variant="bodySm" tone="secondary" style={{ marginTop: 2 }}>
+                              {subtitle}
+                            </Text>
+                          ) : null}
+                        </View>
+                        {headerAction}
+                        <IconButton
+                          name="close"
+                          onPress={onClose}
+                          accessibilityLabel="Close"
+                          variant="tonal"
+                          size="sm"
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                </GestureDetector>
+              ) : null}
+
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={{
+                  paddingHorizontal: theme.spacing.xl,
+                  // The footer is pinned over this, so the last field needs room
+                  // to clear it rather than ending flush against the button.
+                  paddingBottom: footer ? theme.spacing.sm : 0,
+                }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                // iOS otherwise leaves the focused field under the keyboard when
+                // the sheet is tall enough to scroll.
+                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              >
+                {children}
+              </ScrollView>
+
+              {footer ? (
+                <View
+                  style={{
+                    paddingHorizontal: theme.spacing.xl,
+                    paddingTop: theme.spacing.lg,
+                  }}
+                >
+                  {footer}
+                </View>
+              ) : null}
+              </GlassSurface>
+            </GlassBackdropProvider>
           </Animated.View>
         </KeyboardAvoidingView>
       </GestureHandlerRootView>
@@ -289,7 +330,10 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   keyboardWrap: { flex: 1, justifyContent: 'flex-end', pointerEvents: 'box-none' },
-  sheet: { width: '100%', overflow: 'hidden' },
+  sheet: { width: '100%' },
+  // The glass surface fills the animated wrapper, which is what carries the
+  // translate and the height cap.
+  sheetSurface: { width: '100%', flexShrink: 1 },
   handleRow: { alignItems: 'center', paddingTop: 10, paddingBottom: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   titleText: { flex: 1 },

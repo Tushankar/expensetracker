@@ -9,7 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, LinearGradient, Stop } from 'react-native-svg';
 
-import { useTheme } from '@/theme';
+import { GlassSurface } from '@/components/ui';
+import { useTheme, type GlassTone } from '@/theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -23,6 +24,8 @@ export type ProgressRingProps = {
   colorEnd?: string;
   trackColor?: string;
   children?: ReactNode;
+  /** Material for the disc inside the ring. `none` leaves it open. */
+  centerTone?: GlassTone | 'none';
   accessibilityLabel?: string;
   /** Unique within a screen — SVG gradient ids are document-global. */
   gradientId?: string;
@@ -32,6 +35,9 @@ export type ProgressRingProps = {
  * The savings ring. Sweeps up from zero on mount so the number in the middle lands
  * with it, which is the one piece of motion on Home that carries meaning rather
  * than decoration.
+ *
+ * Built like the donut: a translucent track, a hairline along each face of the
+ * band, and a disc of the same material carrying the figure in the middle.
  */
 export function ProgressRing({
   value,
@@ -41,6 +47,7 @@ export function ProgressRing({
   colorEnd,
   trackColor,
   children,
+  centerTone = 'thin',
   accessibilityLabel,
   gradientId = 'ring',
 }: ProgressRingProps) {
@@ -50,6 +57,10 @@ export function ProgressRing({
   const clamped = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
+
+  const outerEdge = radius + thickness / 2 - 0.5;
+  const innerEdge = radius - thickness / 2 + 0.5;
+  const holeSize = Math.max(0, (radius - thickness / 2) * 2);
 
   const progress = useSharedValue(reduceMotion ? clamped : 0);
 
@@ -71,6 +82,19 @@ export function ProgressRing({
       accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
       style={{ width: size, height: size }}
     >
+      {centerTone === 'none' || holeSize <= 0 ? null : (
+        <View style={[StyleSheet.absoluteFill, styles.center, styles.noTouch]}>
+          <GlassSurface
+            tone={centerTone}
+            radius={holeSize / 2}
+            sheen={false}
+            // The band draws its own inner hairline exactly here.
+            rim={false}
+            style={{ width: holeSize, height: holeSize }}
+          />
+        </View>
+      )}
+
       <Svg width={size} height={size}>
         <Defs>
           <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
@@ -84,7 +108,7 @@ export function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={trackColor ?? theme.colors.surfaceMuted}
+            stroke={trackColor ?? theme.glass.thin.fill}
             strokeWidth={thickness}
             fill="none"
           />
@@ -98,6 +122,23 @@ export function ProgressRing({
             strokeLinecap="round"
             fill="none"
             animatedProps={animatedProps}
+          />
+
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={outerEdge}
+            stroke={theme.glass.regular.highlight}
+            strokeWidth={1}
+            fill="none"
+          />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={innerEdge}
+            stroke={theme.glass.thin.border}
+            strokeWidth={1}
+            fill="none"
           />
         </G>
       </Svg>

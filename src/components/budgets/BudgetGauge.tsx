@@ -53,6 +53,10 @@ function polar(cx: number, cy: number, radius: number, degrees: number) {
  * way a bar has to be read left-to-right to give. The threshold notch is the
  * point of the whole screen: it marks where the app will speak up, so the person
  * can see how close they are to being warned before they are.
+ *
+ * The band is glass, like the donut and the savings ring: a translucent track
+ * with a hairline along each face, so the arc looks like it is filling a channel
+ * rather than being painted onto the card.
  */
 export function BudgetGauge({
   value,
@@ -75,6 +79,9 @@ export function BudgetGauge({
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
   const arc = circumference * (SWEEP_DEG / 360);
+
+  const outerEdge = radius + thickness / 2 - 0.5;
+  const innerEdge = radius - thickness / 2 + 0.5;
 
   const progress = useSharedValue(reduceMotion ? clamped : 0);
 
@@ -120,7 +127,7 @@ export function BudgetGauge({
             cx={center}
             cy={center}
             r={radius}
-            stroke={trackColor ?? theme.colors.surfaceStrong}
+            stroke={trackColor ?? theme.glass.thin.fill}
             strokeWidth={thickness}
             strokeDasharray={[arc, circumference]}
             strokeLinecap="round"
@@ -136,6 +143,28 @@ export function BudgetGauge({
             strokeLinecap="round"
             fill="none"
             animatedProps={animatedProps}
+          />
+
+          {/* The two faces of the channel. Each dash is scaled by its own radius
+              so both hairlines stop exactly where the track does, rather than
+              running on across the gap at the bottom. */}
+          <Circle
+            cx={center}
+            cy={center}
+            r={outerEdge}
+            stroke={theme.glass.regular.highlight}
+            strokeWidth={1}
+            strokeDasharray={[(arc * outerEdge) / radius, circumference * 2]}
+            fill="none"
+          />
+          <Circle
+            cx={center}
+            cy={center}
+            r={innerEdge}
+            stroke={theme.glass.thin.border}
+            strokeWidth={1}
+            strokeDasharray={[(arc * innerEdge) / radius, circumference * 2]}
+            fill="none"
           />
         </G>
 

@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
-import { Icon, PillButton, Text } from '@/components/ui';
+import { Icon, PillButton, Text, withAlpha } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
 import { formatINR, percentChange } from '@/utils/currency';
@@ -16,9 +17,9 @@ export type ActivitySummaryCardProps = {
  * The period's money at the top of Activity: what went out, what came in, and what
  * merely moved.
  *
- * Three figures rather than a chart, because all three are exact — the server
- * aggregates over the whole period, while a chart drawn from the loaded pages
- * would be a picture of how far the user has scrolled.
+ * Every figure is exact — the server aggregates over the whole period, while
+ * anything drawn from the loaded pages would be a picture of how far the user has
+ * scrolled. The one graphic is a ratio, not a trend, for the same reason.
  *
  * The period pill lives here rather than in the toolbar above, for the same
  * reason it lives on the balance card on Home: the control belongs to the
@@ -32,6 +33,11 @@ export function ActivitySummaryCard({ summary, onPeriodPress }: ActivitySummaryC
   const delta = percentChange(summary.spent, summary.previousSpent);
   const spendingUp = (delta ?? 0) > 0;
 
+  // The rail is a ratio, so it needs the total movement rather than either half.
+  const movement = summary.income + summary.spent;
+  const outShare = movement > 0 ? summary.spent / movement : 0;
+  const inShare = movement > 0 ? summary.income / movement : 0;
+
   return (
     <LinearGradient
       colors={[theme.colors.heroSurface, theme.colors.heroSurfaceEnd]}
@@ -43,13 +49,18 @@ export function ActivitySummaryCard({ summary, onPeriodPress }: ActivitySummaryC
           borderRadius: theme.radius.xl,
           borderWidth: theme.layout.hairline,
           borderColor: theme.colors.heroBorder,
+          // A lighter top edge reads as a light source above the slab.
+          borderTopColor: 'rgba(255, 255, 255, 0.16)',
+          overflow: 'hidden',
           padding: theme.spacing.xl,
         },
       ]}
     >
+      <SummaryBloom color={theme.colors.heroNegative} />
+
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <Text
-          variant="labelSm"
+          variant="overline"
           color={theme.colors.heroTextMuted}
           style={{ flex: 1, minWidth: 0 }}
           numberOfLines={1}
@@ -91,80 +102,174 @@ export function ActivitySummaryCard({ summary, onPeriodPress }: ActivitySummaryC
           accessibilityLabel={`Spending ${spendingUp ? 'up' : 'down'} ${Math.abs(delta).toFixed(
             0,
           )} percent versus the previous period`}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: theme.spacing.sm }}
         >
-          <Icon
-            name={spendingUp ? 'trendingUp' : 'trendingDown'}
-            size={13}
-            color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
-            strokeWidth={2.4}
-          />
-          <Text
-            variant="caption"
-            color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 3,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+              borderRadius: theme.radius.pill,
+              backgroundColor: withAlpha(
+                spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive,
+                0.16,
+              ),
+            }}
           >
-            {`${Math.abs(delta).toFixed(0)}%`}
-          </Text>
-          <Text variant="caption" color={theme.colors.heroTextMuted}>
+            <Icon
+              name={spendingUp ? 'trendingUp' : 'trendingDown'}
+              size={12}
+              color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
+              strokeWidth={2.4}
+            />
+            <Text
+              variant="caption"
+              color={spendingUp ? theme.colors.heroNegative : theme.colors.heroPositive}
+              maxFontSizeMultiplier={1.3}
+            >
+              {`${Math.abs(delta).toFixed(0)}%`}
+            </Text>
+          </View>
+          <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
             vs last period
           </Text>
         </View>
       ) : null}
 
-      <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginTop: theme.spacing.xl }}>
-        <Figure label="Received" value={formatINR(summary.income)} tone="positive" />
+      {/* Out against in, as one rail. The same graphic carries the same meaning on
+          the balance card, so the two screens read as one app. */}
+      <View
+        accessible
+        accessibilityLabel={
+          movement > 0
+            ? `${Math.round(outShare * 100)} percent out, ${Math.round(inShare * 100)} percent in`
+            : 'Nothing moved this period'
+        }
+        style={{
+          flexDirection: 'row',
+          gap: 3,
+          height: 10,
+          marginTop: theme.spacing.xl,
+          borderRadius: 5,
+          backgroundColor: theme.colors.heroTile,
+          borderWidth: theme.layout.hairline,
+          borderColor: theme.colors.heroTileBorder,
+          overflow: 'hidden',
+        }}
+      >
+        {summary.spent > 0 ? (
+          <View
+            style={{
+              flexGrow: outShare,
+              flexBasis: 0,
+              // A 2% sliver still has to be visible, or the rail lies by omission.
+              minWidth: 5,
+              borderRadius: 5,
+              backgroundColor: theme.colors.heroNegative,
+            }}
+          />
+        ) : null}
+        {summary.income > 0 ? (
+          <View
+            style={{
+              flexGrow: inShare,
+              flexBasis: 0,
+              minWidth: 5,
+              borderRadius: 5,
+              backgroundColor: theme.colors.heroPositive,
+            }}
+          />
+        ) : null}
+      </View>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: theme.spacing.lg,
+          marginTop: theme.spacing.md,
+        }}
+      >
+        <Figure
+          label="Received"
+          value={formatINR(summary.income)}
+          share={inShare}
+          color={theme.colors.heroPositive}
+        />
+        <Rule />
         <Figure
           label="Kept"
           value={formatINR(summary.saved, { signed: true })}
-          tone={summary.saved < 0 ? 'negative' : 'positive'}
+          color={summary.saved < 0 ? theme.colors.heroNegative : theme.colors.heroPositive}
         />
-        {/* Shown whenever there is one, and never folded into the two above it. */}
-        {summary.transferred > 0 ? (
-          <Figure label="Moved" value={formatINR(summary.transferred)} tone="muted" />
-        ) : null}
       </View>
+
+      {/* Transfers move money without spending it, so they sit outside the figures
+          entirely — visible, but never folded into either one. */}
+      {summary.transferred > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: theme.spacing.lg,
+            paddingTop: theme.spacing.md,
+            borderTopWidth: theme.layout.hairline,
+            borderTopColor: theme.colors.heroTileBorder,
+          }}
+        >
+          <Icon name="repeat" size={12} color={theme.colors.heroTextMuted} strokeWidth={2.2} />
+          <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+            {`${formatINR(summary.transferred)} moved between your accounts`}
+          </Text>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }
 
+/**
+ * One supporting figure under the rail.
+ *
+ * Borderless: the rail above already groups these, and a filled tile around each
+ * one was competing with the total for weight on a card that only has one
+ * headline.
+ */
 function Figure({
   label,
   value,
-  tone,
+  share,
+  color,
 }: {
   label: string;
   value: string;
-  tone: 'positive' | 'negative' | 'muted';
+  /** Omitted for a figure that is not a slice of the rail, such as what was kept. */
+  share?: number;
+  color: string;
 }) {
   const theme = useTheme();
-
-  const color =
-    tone === 'positive'
-      ? theme.colors.heroPositive
-      : tone === 'negative'
-        ? theme.colors.heroNegative
-        : theme.colors.heroTextMuted;
 
   return (
     <View
       accessible
       accessibilityLabel={`${label}, ${value}`}
-      style={{
-        flex: 1,
-        minWidth: 0,
-        gap: 3,
-        padding: theme.spacing.md,
-        borderRadius: theme.radius.md,
-        backgroundColor: theme.colors.heroTile,
-        borderWidth: theme.layout.hairline,
-        borderColor: theme.colors.heroTileBorder,
-      }}
+      style={{ flex: 1, minWidth: 0, gap: 5 }}
     >
-      <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
-        {label}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+        <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
+          {label}
+        </Text>
+        {share !== undefined && share > 0 ? (
+          <Text variant="caption" color={theme.colors.heroTextMuted} style={{ opacity: 0.7 }}>
+            {`${Math.round(share * 100)}%`}
+          </Text>
+        ) : null}
+      </View>
       <Text
-        variant="labelSm"
+        variant="amount"
         color={color}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -175,3 +280,42 @@ function Figure({
     </View>
   );
 }
+
+function Rule() {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        width: theme.layout.hairline,
+        alignSelf: 'stretch',
+        backgroundColor: theme.colors.heroTileBorder,
+      }}
+    />
+  );
+}
+
+/** Atmosphere on the slab. Non-interactive and outside the layout. */
+function SummaryBloom({ color }: { color: string }) {
+  return (
+    <Svg
+      width={280}
+      height={200}
+      style={styles.bloom}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Defs>
+        <RadialGradient id="activitySummaryBloom" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={0.16} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.04} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={200} cy={55} rx={130} ry={95} fill="url(#activitySummaryBloom)" />
+    </Svg>
+  );
+}
+
+const styles = StyleSheet.create({
+  bloom: { position: 'absolute', top: -36, right: -36, pointerEvents: 'none' },
+});

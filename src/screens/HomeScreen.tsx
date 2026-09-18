@@ -127,6 +127,8 @@ export function HomeScreen() {
           label: category?.name ?? 'Uncategorised',
           color: categoryColor(category?.color ?? 'other'),
           amount: entry.amount,
+          group: category?.group,
+          icon: category?.icon,
         };
       }),
       { othersColor: categoryColor('other') },
@@ -293,8 +295,15 @@ export function HomeScreen() {
             <SpendingOverview
               spent={periodSummary.spent}
               breakdown={breakdown}
+              previousSpent={periodSummary.previousSpent}
               periodLabel={range.label}
+              onPeriodPress={openRangeSheet}
               onSeeAll={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
+              // Opens the ledger rather than this category's slice of it: the
+              // Transactions tab takes no route params and holds its filters in
+              // local state, so pre-filtering is a change to that screen, not a
+              // handler here.
+              onCategoryPress={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
             />
           </View>
         ) : null}

@@ -43,4 +43,8 @@ export type CategorySlice = {
   amount: Paise;
   /** 0–1 share of the period's total spend. */
   share: number;
+  /** The group the category belongs to, e.g. "Entertainment". Absent on "Others". */
+  group?: string;
+  /** Name from the local icon registry. Resolve with `toIconName`. */
+  icon?: string;
 };

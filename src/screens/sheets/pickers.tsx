@@ -8,6 +8,7 @@ import {
   Calendar,
   Divider,
   EmptyState,
+  GlassFill,
   Icon,
   IconTile,
   Input,
@@ -36,6 +37,13 @@ type RowProps = {
   onPress: () => void;
 };
 
+/**
+ * One row of a picker.
+ *
+ * The chosen row is a pane of accent glass rather than a tick on an empty line,
+ * so a long category list says what is selected before you have read any of it.
+ * The tick stays as well: colour alone is not an answer.
+ */
 function PickerRow({ label, sublabel, leading, trailing, selected, onPress }: RowProps) {
   const theme = useTheme();
 
@@ -56,8 +64,10 @@ function PickerRow({ label, sublabel, leading, trailing, selected, onPress }: Ro
         paddingHorizontal: theme.spacing.sm,
         borderRadius: theme.radius.md,
         backgroundColor: pressed ? theme.colors.surfaceMuted : 'transparent',
+        overflow: 'hidden',
       })}
     >
+      {selected ? <GlassFill tone="brand" radius="md" sheen={false} /> : null}
       {leading}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text variant="label" numberOfLines={1}>

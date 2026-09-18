@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { View } from 'react-native';
 
 import type { Account, Category, Transaction } from '@/api/types';
-import { Divider, Text } from '@/components/ui';
+import { Divider, GlassFill, Text } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { formatINR } from '@/utils/currency';
 import { formatDayLabel } from '@/utils/date';
@@ -64,10 +64,15 @@ export function TransactionSectionHeader({ label, net }: { label: string; net: n
         paddingTop: theme.spacing.xl,
         paddingBottom: theme.spacing.sm,
         paddingHorizontal: theme.spacing.xs,
-        // Sticky headers slide under this, so it cannot be transparent.
-        backgroundColor: theme.colors.background,
+        overflow: 'hidden',
       }}
     >
+      {/* A whole day of rows slides under this header, so it has to be the one
+          thing on the screen you cannot see through — hence chrome, the same
+          material as the tab bar, and for the same reason. No rim: it spans the
+          list and a boxed hairline would read as a card. */}
+      <GlassFill tone="chrome" radius={0} rim={false} />
+
       <Text variant="overline" tone="tertiary">
         {label}
       </Text>
@@ -118,6 +123,9 @@ export const TransactionListItem = memo(function TransactionListItem({
   return (
     <View
       style={{
+        // Painted rather than a `GlassSurface`: the row is one slice of a card
+        // whose top and bottom live in different list items, so it takes the
+        // translucent surface token and leaves the corners to the ends.
         backgroundColor: theme.colors.surface,
         borderLeftWidth: theme.layout.hairline,
         borderRightWidth: theme.layout.hairline,

@@ -12,12 +12,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useCallback, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { createQueryClient, useTimezoneSync } from '@/api';
-import { Toast } from '@/components/ui';
+import { AmbientBackground, Toast } from '@/components/ui';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { toNavigationTheme } from '@/navigation/navigationTheme';
 import { AddTransactionSheet } from '@/screens/sheets/AddTransactionSheet';
@@ -92,7 +92,10 @@ function AppShell() {
   }, [theme.colors.background]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <AmbientBackground>
+      {/* Every surface above this point is glass, and glass needs something to
+          refract — see `AmbientBackground`. Which is also why the navigator and
+          every screen under it are transparent rather than painted. */}
       <NavigationContainer theme={toNavigationTheme(theme)}>
         <StatusBar style="light" />
         <RootNavigator />
@@ -101,7 +104,7 @@ function AppShell() {
         {signedIn ? <AddTransactionSheet /> : null}
         <ToastHost />
       </NavigationContainer>
-    </View>
+    </AmbientBackground>
   );
 }
 

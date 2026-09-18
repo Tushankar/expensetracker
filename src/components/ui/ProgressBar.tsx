@@ -9,6 +9,8 @@ import Animated, {
 
 import { useTheme } from '@/theme';
 
+import { GlassFill, Gloss } from './GlassSurface';
+
 export type ProgressBarProps = {
   /** 0–1. Values outside the range are clamped. */
   value: number;
@@ -23,6 +25,10 @@ export type ProgressBarProps = {
 /**
  * Thin, rounded progress track. Animates from 0 on mount so a screen of budgets
  * fills in rather than snapping.
+ *
+ * A recessed channel of glass with a lit bead running along it. The bead keeps
+ * its own colour — on a budget row that colour is the whole message — and takes
+ * the light on top of it.
  */
 export function ProgressBar({
   value,
@@ -54,12 +60,16 @@ export function ProgressBar({
         {
           height,
           borderRadius: height / 2,
-          backgroundColor: trackColor ?? theme.colors.surfaceStrong,
+          backgroundColor: trackColor,
           overflow: 'hidden',
         },
         style,
       ]}
     >
+      {/* Skipped when the caller names its own track colour, which some budget
+          rows do to tint the channel with the category. */}
+      {trackColor ? null : <GlassFill tone="thin" radius={height / 2} sheen={false} />}
+
       <Animated.View
         style={[
           fillStyle,
@@ -67,9 +77,12 @@ export function ProgressBar({
             height: '100%',
             borderRadius: height / 2,
             backgroundColor: color ?? theme.colors.brand,
+            overflow: 'hidden',
           },
         ]}
-      />
+      >
+        <Gloss radius={height / 2} rim={false} />
+      </Animated.View>
     </View>
   );
 }

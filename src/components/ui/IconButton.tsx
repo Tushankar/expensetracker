@@ -2,8 +2,9 @@ import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { tapFeedback } from '@/utils/haptics';
-import { useTheme } from '@/theme';
+import { useTheme, type GlassTone } from '@/theme';
 
+import { GlassFill, PressWash } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { usePressAnimation } from './usePressAnimation';
 
@@ -37,18 +38,17 @@ export function IconButton({
   testID,
 }: IconButtonProps) {
   const theme = useTheme();
-  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation(
+  const { animatedStyle, progress, onPressIn, onPressOut } = usePressAnimation(
     theme.pressScale.icon,
     disabled,
   );
 
   const box = BOX[size];
-  const background =
-    variant === 'surface'
-      ? theme.colors.surface
-      : variant === 'tonal'
-        ? theme.colors.surfaceMuted
-        : 'transparent';
+
+  // `plain` has no material at rest — it is a glyph until you touch it, and then
+  // the glass forms under your finger. The other two are simply thicker.
+  const material: GlassTone | null =
+    variant === 'surface' ? 'regular' : variant === 'tonal' ? 'thin' : null;
 
   const glyphColor =
     color ?? (variant === 'tonal' ? theme.colors.textSecondary : theme.colors.textPrimary);
@@ -82,13 +82,12 @@ export function IconButton({
             width: box,
             height: box,
             borderRadius: box / 2,
-            backgroundColor: background,
-            borderWidth: variant === 'surface' ? theme.layout.hairline : 0,
-            borderColor: theme.colors.border,
             opacity: disabled ? 0.42 : 1,
           },
         ]}
       >
+        {material ? <GlassFill tone={material} radius={box / 2} sheen={false} /> : null}
+        {disabled ? null : <PressWash progress={progress} radius={box / 2} />}
         <Icon name={name} size={GLYPH[size]} color={glyphColor} />
       </Animated.View>
     </Pressable>
@@ -96,5 +95,6 @@ export function IconButton({
 }
 
 const styles = StyleSheet.create({
-  box: { alignItems: 'center', justifyContent: 'center' },
+  // `overflow` keeps the round material and the press wash inside the circle.
+  box: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });
