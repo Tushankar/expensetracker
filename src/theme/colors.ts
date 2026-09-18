@@ -1,4 +1,4 @@
-import { sheenWhite, withAlpha } from './alpha';
+import { shadeBlack, sheenWhite, withAlpha } from './alpha';
 import {
   accents,
   actionHues,
@@ -138,10 +138,12 @@ function build(accent: AccentSpec): ColorTokens {
     heroBorder: accent.heroBorder,
     heroText: '#FFFFFF',
     heroTextMuted: accent.heroTextMuted,
-    // A tile on the hero slab is glass on glass, so it is a white wash rather
-    // than its own colour — a second saturated fill there just muddies the one
-    // underneath it.
-    heroTile: sheenWhite(0.1),
+    // A tile on the hero slab is glass on glass, so it is a wash rather than its
+    // own colour — a second saturated fill there only muddies the one underneath.
+    // It washes *down*: the slab is the brightest surface in the app and it
+    // carries a glow, so a white tile on it left quiet text at 3.5:1. Recessed
+    // rather than raised, with the white kept where it belongs, on the rim.
+    heroTile: shadeBlack(0.18),
     heroTileBorder: sheenWhite(0.16),
     heroPositive: money.in,
     heroNegative: money.out,

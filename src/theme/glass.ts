@@ -191,12 +191,15 @@ function build(accent: AccentSpec): GlassTokens {
       {
         blurTint: 'systemUltraThinMaterialDark',
         intensity: 22,
-        alpha: 0.34,
+        // Darker and less lit than its thinness suggests, because this is the rung
+        // that ends up *inside* a card carrying a corner glow — a badge or a chip
+        // on top of the brightest surface the app can produce.
+        alpha: 0.42,
         border: 0.09,
         highlight: 0.16,
         lowlight: 0.1,
-        sheenTop: 0.05,
-        sheenMid: 0.012,
+        sheenTop: 0.035,
+        sheenMid: 0.01,
         sheenBottom: 0,
         nativeStyle: 'clear',
         nativeFillScale: 0.4,
@@ -293,12 +296,12 @@ function build(accent: AccentSpec): GlassTokens {
       {
         blurTint: 'systemThinMaterialDark',
         intensity: 44,
-        alpha: 0.1,
+        alpha: 0.05,
         border: 0.55,
         highlight: 0.28,
         lowlight: 0.14,
-        sheenTop: 0.05,
-        sheenMid: 0.015,
+        sheenTop: 0.02,
+        sheenMid: 0.008,
         sheenBottom: 0,
         nativeStyle: 'regular',
         nativeFillScale: 0.65,

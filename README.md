@@ -540,7 +540,15 @@ what they refract. The system has three parts:
 intuitive way to make a panel look frosted, and on a dark app it is the way to ruin it:
 white at 8% over the colour field takes a caption to 2.9:1, and a screen of pale grey
 boxes reads as fog. So the fill is the ink ramp held back from opacity, and the white
-lives in the rim and the sheen, where the light on real glass actually is.
+lives in the rim and the sheen, where the light on real glass actually is. The same
+rule settled `heroTile`, which washes down rather than up.
+
+**A decorative glow goes behind the glass, never on top of it.** Several cards carry a
+soft bloom in one corner. Painted over the material it adds its whole luminance to the
+text on that card — measured, that is a caption at 3.1:1. Passed to `Card` as
+`backdrop` it lands under the material, which attenuates it, and the same glow at the
+same strength leaves the card comfortably inside AA. It also looks more like glass,
+because that is what glass does to a light source behind it.
 
 **It degrades in two steps, and `Settings → Design system` says which one you are on.**
 iOS 26 gets real Liquid Glass through `expo-glass-effect`, and our own layers pull back
@@ -584,12 +592,15 @@ state on one screen, including the keypad and the calendar.
 ## Accessibility
 
 - Text tones are set from a measurement, not by eye. The binding case is the brightest
-  surface the glass can produce: the peak of a bloom, under the palest rung, on the
-  platform whose fallback lightens a near-black field instead of darkening it. Across
-  all three accents and all seven rungs, the floor is `textSecondary` 5.0:1,
-  `textTertiary` 4.7:1, `brandText` on accent glass 4.6:1 and white on the hero 10.1:1 —
-  all clear WCAG AA. `theme/glass.ts` and the `textTertiary` entries in `theme/palette.ts`
-  both carry notes to this effect; lowering either takes a caption under AA.
+  pixel the glass can produce: the peak of an ambient bloom, plus a card's own corner
+  glow, under the palest rung, at the corner where the sheen starts, on the platform
+  whose fallback lightens a near-black field instead of darkening it. Across all three
+  accents, all seven rungs, every glow hue, and surfaces nested one inside another, the
+  floor is `textSecondary` 4.9:1, `textTertiary` 4.5:1, `brandText` on accent glass
+  4.7:1, `heroTextMuted` on a lit hero slab 4.8:1 and white on the hero 8.9:1 — all
+  clear WCAG AA. Several tokens carry notes saying so; `textTertiary`, `heroTextMuted`,
+  the `ultraThin` and `brand` alphas and the aurora opacities are all held where they
+  are by this, not by taste.
 - Reduce Transparency is honoured, not approximated: every surface switches to a solid
   fill from the ink ramp, and the subscription lives once in `GlassProvider` rather than
   in each of the forty pieces of glass on a screen.
