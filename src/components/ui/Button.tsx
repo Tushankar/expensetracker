@@ -33,6 +33,7 @@ export type ButtonProps = {
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
+  align?: 'start' | 'center' | 'end';
   /** Suppress the press tick, e.g. for buttons fired repeatedly. */
   haptic?: boolean;
   accessibilityHint?: string;
@@ -141,6 +142,7 @@ export function Button({
   loading = false,
   disabled = false,
   fullWidth = false,
+  align,
   haptic = true,
   accessibilityHint,
   style,
@@ -172,6 +174,14 @@ export function Button({
     onPress?.();
   }
 
+  const alignStyle = fullWidth
+    ? styles.fullWidth
+    : align === 'center'
+      ? styles.alignCenter
+      : align === 'end'
+        ? styles.alignEnd
+        : styles.autoWidth;
+
   return (
     <Pressable
       onPress={handlePress}
@@ -185,7 +195,7 @@ export function Button({
       accessibilityState={{ disabled, busy: loading }}
       // `sm` is below the 48dp minimum target, so extend the touch area instead.
       hitSlop={size === 'sm' ? 8 : 0}
-      style={[fullWidth ? styles.fullWidth : styles.autoWidth, style]}
+      style={[alignStyle, style]}
     >
       <Animated.View
         style={[
@@ -237,6 +247,8 @@ const styles = StyleSheet.create({
   noTouch: { pointerEvents: 'none' },
   fullWidth: { alignSelf: 'stretch' },
   autoWidth: { alignSelf: 'flex-start' },
+  alignCenter: { alignSelf: 'center' },
+  alignEnd: { alignSelf: 'flex-end' },
   base: {
     flexDirection: 'row',
     alignItems: 'center',

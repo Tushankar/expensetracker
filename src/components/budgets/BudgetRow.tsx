@@ -9,7 +9,7 @@ import Animated, {
 
 import type { BudgetProgress, BudgetState } from '@/api/types';
 import { toIconName } from '@/components/icons/registry';
-import { Icon, IconTile, Text } from '@/components/ui';
+import { Icon, IconTile, Text, withAlpha } from '@/components/ui';
 import { categoryColor, useTheme, type Theme } from '@/theme';
 import { formatINR } from '@/utils/currency';
 import { tapFeedback } from '@/utils/haptics';
@@ -89,53 +89,93 @@ export function BudgetRow({ budget, onPress, compact = false }: BudgetRowProps) 
           />
         )}
 
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Text variant="label" numberOfLines={1}>
             {label}
           </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            {budget.state === 'on_track' ? null : (
+              <Icon
+                name={budget.state === 'exceeded' ? 'alertCircle' : 'alertTriangle'}
+                size={12}
+                color={accent}
+                strokeWidth={2.2}
+              />
+            )}
+            <Text
+              variant="caption"
+              color={budget.state === 'on_track' ? theme.colors.textTertiary : accent}
+              numberOfLines={1}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {budget.state === 'exceeded'
+                ? `${formatINR(budget.overBy)} over cap`
+                : `${formatINR(budget.remaining)} still available`}
+            </Text>
+          </View>
         </View>
 
         {/* The example from the brief, read straight off the row: ₹5,000 / ₹7,000. */}
-        <Text variant="labelSm" numberOfLines={1}>
-          {formatINR(budget.spent)}
-          <Text variant="labelSm" tone="tertiary">
-            {` / ${formatINR(budget.amount)}`}
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <Text variant="amountSm" numberOfLines={1}>
+            {formatINR(budget.spent)}
           </Text>
-        </Text>
+          <Text variant="caption" tone="tertiary" numberOfLines={1}>
+            {`of ${formatINR(budget.amount)}`}
+          </Text>
+        </View>
+
+        {onPress ? (
+          <Icon name="chevronRight" size={16} color={theme.colors.textTertiary} strokeWidth={2} />
+        ) : null}
       </View>
 
       <View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={{
-          height: 8,
-          borderRadius: 4,
-          overflow: 'hidden',
-          backgroundColor: theme.colors.surfaceStrong,
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
       >
-        <Animated.View
-          style={[fillStyle, { height: '100%', borderRadius: 4, backgroundColor: accent }]}
-        />
-      </View>
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-        {budget.state === 'on_track' ? null : (
-          <Icon
-            name={budget.state === 'exceeded' ? 'alertCircle' : 'alertTriangle'}
-            size={13}
-            color={accent}
-            strokeWidth={2.2}
+        <View
+          style={{
+            flex: 1,
+            height: 8,
+            borderRadius: 4,
+            overflow: 'hidden',
+            backgroundColor: theme.colors.surfaceStrong,
+          }}
+        >
+          <Animated.View
+            style={[fillStyle, { height: '100%', borderRadius: 4, backgroundColor: accent }]}
           />
-        )}
-        <Text variant="caption" color={accent} numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
-          {budget.state === 'exceeded'
-            ? `${formatINR(budget.overBy)} over`
-            : `${formatINR(budget.remaining)} left`}
-        </Text>
-        <Text variant="caption" tone="tertiary">
-          {`${budget.percent}%`}
-        </Text>
+          {/* Where the alert fires, on the same track it will fire about. */}
+          <View
+            style={{
+              position: 'absolute',
+              left: `${Math.min(97, budget.warnAtPercent)}%`,
+              top: 0,
+              bottom: 0,
+              width: 2,
+              borderRadius: 1,
+              backgroundColor: theme.colors.background,
+              opacity: 0.85,
+            }}
+          />
+        </View>
+
+        <View
+          style={{
+            minWidth: 44,
+            alignItems: 'center',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: theme.radius.pill,
+            backgroundColor: withAlpha(accent, 0.14),
+          }}
+        >
+          <Text variant="caption" color={accent} numberOfLines={1}>
+            {`${budget.percent}%`}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -157,6 +197,7 @@ export function BudgetRow({ budget, onPress, compact = false }: BudgetRowProps) 
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={`${STATE_LABEL[budget.state]}. Opens this budget.`}
+      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
     >
       {body}
     </Pressable>

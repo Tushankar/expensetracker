@@ -589,6 +589,45 @@ export const iconRegistry = {
     { t: 'path', d: 'M2 9v1a2 2 0 0 0 2 2h1' },
     { t: 'path', d: 'M16 11h.01' },
   ],
+
+  // ------------------------------------------------------- budgeting & pacing
+  /** Speedometer. Pacing, daily safe-spend, "how fast am I burning this". */
+  gauge: [
+    { t: 'path', d: 'M4.6 19.3A8.5 8.5 0 1 1 19.4 19.3' },
+    { t: 'path', d: 'M12 15 14.9 10.3' },
+    { t: 'circle', cx: 12, cy: 15, r: 1.35 },
+  ],
+  /** Guardrails: a cap that protects the rest of the month. */
+  shieldCheck: [
+    { t: 'path', d: 'M12 2.8 20 5.7v5.6c0 4.8-3.3 8.2-8 9.9-4.7-1.7-8-5.1-8-9.9V5.7z' },
+    { t: 'path', d: 'M8.9 11.9 11.2 14.2 15.3 9.8' },
+  ],
+  /** Bell mid-ring — the 80% warning, as opposed to a silent `bell`. */
+  bellAlert: [
+    { t: 'path', d: 'M17 9a5 5 0 1 0-10 0c0 5.4-2.1 7.1-2.1 7.1h14.2S17 14.4 17 9' },
+    { t: 'path', d: 'M13.5 20a1.9 1.9 0 0 1-3 0' },
+    { t: 'path', d: 'M19.8 3.6a7.4 7.4 0 0 1 1.9 3.6' },
+    { t: 'path', d: 'M4.2 3.6a7.4 7.4 0 0 0-1.9 3.6' },
+  ],
+  /** Single four-point star with a companion. Reads cleaner on a button than `sparkles`. */
+  sparkle: [
+    { t: 'path', d: 'M11 3.2 12.9 8.3 18 10.2 12.9 12.1 11 17.2 9.1 12.1 4 10.2 9.1 8.3z' },
+    { t: 'path', d: 'M18 15.4 18.8 17.4 20.8 18.2 18.8 19 18 21 17.2 19 15.2 18.2 17.2 17.4z' },
+  ],
+  /** Month-end marker. */
+  flag: [
+    { t: 'path', d: 'M5.5 21.5V3' },
+    { t: 'path', d: 'M5.5 4.2h11.8l-1.9 3.8 1.9 3.8H5.5' },
+  ],
+  /** Adjust a cap. A tune control says "change this number", a cog says "app settings". */
+  sliders: [
+    { t: 'path', d: 'M3.5 7.5h5' },
+    { t: 'path', d: 'M13 7.5h7.5' },
+    { t: 'circle', cx: 10.7, cy: 7.5, r: 2.2 },
+    { t: 'path', d: 'M3.5 16.5h7.5' },
+    { t: 'path', d: 'M15.5 16.5h5' },
+    { t: 'circle', cx: 13.3, cy: 16.5, r: 2.2 },
+  ],
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconRegistry;

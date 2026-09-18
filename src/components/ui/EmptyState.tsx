@@ -33,9 +33,9 @@ export function EmptyState({
       icon={icon}
       title={title}
       description={description}
-      accent={colors.textTertiary}
-      haloColor={colors.surfaceMuted}
-      action={action}
+      accent={colors.brandText}
+      haloColor={colors.brandSurface}
+      action={action ? { ...action, variant: action.variant ?? 'brand' } : undefined}
       fill={fill}
       style={style}
     />

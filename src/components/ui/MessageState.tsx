@@ -63,16 +63,18 @@ export function MessageState({
     >
       <View
         style={{
-          width: 64,
-          height: 64,
-          borderRadius: 32,
+          width: 68,
+          height: 68,
+          borderRadius: 34,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: haloColor ?? theme.colors.surfaceMuted,
-          marginBottom: theme.spacing.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          marginBottom: theme.spacing.md,
         }}
       >
-        <Icon name={icon} size={28} color={glyph} strokeWidth={1.8} />
+        <Icon name={icon} size={30} color={glyph} strokeWidth={1.8} />
       </View>
 
       <Text variant="h3" align="center">

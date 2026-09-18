@@ -57,8 +57,9 @@ export function QuickAddBar() {
             paddingVertical: 12,
             borderRadius: theme.radius.pill,
             backgroundColor: theme.colors.surfaceMuted,
-            borderWidth: theme.layout.hairline,
-            borderColor: theme.colors.border,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.08)',
+            borderTopColor: 'rgba(255, 255, 255, 0.16)',
           }}
         >
           <Icon name="sparkles" size={16} color={theme.colors.brand} />

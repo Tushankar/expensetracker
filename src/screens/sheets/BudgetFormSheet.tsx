@@ -54,6 +54,9 @@ export type BudgetFormSheetProps = {
   /** Categories that already have a cap, so the picker cannot offer a duplicate. */
   budgetedCategoryIds: Set<string>;
   onClose: () => void;
+  initialScope?: Scope;
+  initialCategoryId?: string;
+  initialAmount?: string;
 };
 
 /**
@@ -72,18 +75,23 @@ export function BudgetFormSheet({
   hasOverall,
   budgetedCategoryIds,
   onClose,
+  initialScope,
+  initialCategoryId,
+  initialAmount,
 }: BudgetFormSheetProps) {
   const theme = useTheme();
   const editing = budget !== null;
 
   const [step, setStep] = useState<'form' | 'category'>('form');
   const [scope, setScope] = useState<Scope>(
-    budget?.scope ?? (hasOverall ? 'category' : 'overall'),
+    budget?.scope ?? initialScope ?? (hasOverall ? 'category' : 'overall'),
   );
   const [categoryId, setCategoryId] = useState<string | undefined>(
-    budget?.categoryId ?? undefined,
+    budget?.categoryId ?? initialCategoryId ?? undefined,
   );
-  const [amount, setAmount] = useState(budget ? paiseToRupeeInput(budget.amount) : '');
+  const [amount, setAmount] = useState(
+    budget ? paiseToRupeeInput(budget.amount) : (initialAmount ?? ''),
+  );
   const [warnAt, setWarnAt] = useState(budget?.warnAtPercent ?? 80);
   const [error, setError] = useState<string | undefined>();
 
