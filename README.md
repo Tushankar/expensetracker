@@ -109,6 +109,7 @@ device.
 | Validation | — | Zod at every edge |
 | Navigation | React Navigation 7, custom tab bar | — |
 | Styling | Token-driven `StyleSheet`, dark-only, three accents | — |
+| Surfaces | Liquid glass: `expo-glass-effect` on iOS 26, `expo-blur` elsewhere | — |
 | Charts | Hand-built on `react-native-svg` | — |
 | Icons | Hand-authored SVG paths, ~95 glyphs | — |
 | Scheduler | — | In-process interval, idempotent by occurrence count |
