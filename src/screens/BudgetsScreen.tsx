@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeBottomTabBarHeight } from '@/navigation/useSafeTabBarHeight';
 import { Fragment, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
@@ -57,7 +57,7 @@ type CategoryFilter = 'all' | 'warning' | 'exceeded' | 'on_track';
  */
 export function BudgetsScreen() {
   const theme = useTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
 
   const [month, setMonth] = useState(() => monthKeyOf(new Date()));
   const [editing, setEditing] = useState<BudgetProgress | null>(null);
@@ -348,7 +348,7 @@ export function BudgetsScreen() {
       </Screen>
 
       <BudgetFormSheet
-        key={formSession}
+        key={`budgets-form-sheet-${formSession}`}
         visible={formOpen}
         budget={editing}
         hasOverall={overall !== null}

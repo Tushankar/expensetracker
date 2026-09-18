@@ -82,7 +82,7 @@ export function PeopleAnalyticsCard({
             {activePeople.slice(0, 5).map((person, index) => {
               const isTheyOwe = person.direction === 'they_owe';
               return (
-                <Fragment key={person.id}>
+                <Fragment key={`person-stat-${person.id || index}-${index}`}>
                   {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
                   <Pressable
                     onPress={() => {

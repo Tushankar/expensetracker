@@ -26,6 +26,14 @@ export type AccentSpec = {
   };
 
   textSecondary: string;
+  /**
+   * The quietest text in the app, and the one the glass constrains.
+   *
+   * These are set from a measurement rather than by eye: the brightest surface the
+   * material ladder can produce, over the brightest point of the ambient field, on
+   * the platform whose fallback lightens instead of darkening. Lowering any of
+   * them takes a caption under WCAG AA on that surface.
+   */
   textTertiary: string;
 
   /** Solid brand fill. */
@@ -62,12 +70,14 @@ export const accents: Record<AccentId, AccentSpec> = {
       border: '#332C48',
     },
     textSecondary: '#A29CBD',
-    textTertiary: '#837CA0',
+    textTertiary: '#9690AE',
     brand: '#7856F0',
     brandPressed: '#6A46E0',
-    brandText: '#9B84FF',
+    // Lifted a step from #9B84FF: on accent glass the fill is this same hue, and
+    // the old value cleared only 4.1:1 against it.
+    brandText: '#A590FF',
     brandSurface: '#1C1638',
-    brandGlow: 'rgba(155, 132, 255, 0.16)',
+    brandGlow: 'rgba(165, 144, 255, 0.16)',
     textOnAccent: '#FFFFFF',
     heroSurface: '#221A4A',
     heroSurfaceEnd: '#150F2E',
@@ -88,7 +98,7 @@ export const accents: Record<AccentId, AccentSpec> = {
       border: '#1E3C32',
     },
     textSecondary: '#8FA69C',
-    textTertiary: '#6B837A',
+    textTertiary: '#8DA099',
     brand: '#00E28C',
     brandPressed: '#00C97C',
     brandText: '#00E28C',
@@ -115,7 +125,7 @@ export const accents: Record<AccentId, AccentSpec> = {
       border: '#453137',
     },
     textSecondary: '#C6A8AE',
-    textTertiary: '#A0787F',
+    textTertiary: '#AE8C92',
     brand: '#D12B40',
     brandPressed: '#B81F33',
     brandText: '#FF7A88',

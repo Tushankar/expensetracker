@@ -82,7 +82,7 @@ export function SkeletonText({
     <View style={{ gap }}>
       {Array.from({ length: lines }, (_, index) => (
         <Skeleton
-          key={index}
+          key={`skeleton-line-${index}`}
           height={lineHeight}
           width={index === lines - 1 ? lastLineWidth : '100%'}
         />

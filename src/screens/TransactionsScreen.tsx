@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeBottomTabBarHeight } from '@/navigation/useSafeTabBarHeight';
 import { useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, SectionList, View } from 'react-native';
@@ -79,7 +79,7 @@ const EMPTY_FILTERS: TransactionFilters = {};
 export function TransactionsScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
 
   const openAddSheet = useUiStore((state) => state.openAddSheet);
 
@@ -660,7 +660,7 @@ export function TransactionsScreen() {
               loadingFallback={
                 <View>
                   {Array.from({ length: 6 }, (_, index) => (
-                    <SkeletonRow key={index} />
+                    <SkeletonRow key={`tx-skeleton-${index}`} />
                   ))}
                 </View>
               }
@@ -727,7 +727,7 @@ export function TransactionsScreen() {
       </Screen>
 
       <FiltersSheet
-        key={filtersSession}
+        key={`tx-filters-sheet-${filtersSession}`}
         visible={filtersOpen}
         value={filters}
         onClose={() => setFiltersOpen(false)}
@@ -738,7 +738,7 @@ export function TransactionsScreen() {
       />
 
       <DateRangeSheet
-        key={rangeSession}
+        key={`tx-range-sheet-${rangeSession}`}
         visible={rangeOpen}
         value={selection}
         onClose={() => setRangeOpen(false)}

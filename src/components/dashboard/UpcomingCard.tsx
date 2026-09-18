@@ -40,7 +40,7 @@ export function UpcomingCard({ rules, onSeeAll, onPress }: UpcomingCardProps) {
       <Card padding={0} radius="lg">
         <View style={{ paddingHorizontal: theme.spacing.lg }}>
           {rules.map((rule, index) => (
-            <Fragment key={rule.id}>
+            <Fragment key={`upcoming-${rule.id || index}-${index}`}>
               {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
               <UpcomingRow rule={rule} now={now} onPress={onPress} />
             </Fragment>

@@ -322,7 +322,7 @@ export function PeopleScreen() {
       </Screen>
 
       <AddPersonSheet
-        key={addSession}
+        key={`people-add-sheet-${addSession}`}
         visible={addOpen}
         onClose={() => setAddOpen(false)}
         onCreated={(person) => navigation.navigate('PersonDetail', { id: person.id })}

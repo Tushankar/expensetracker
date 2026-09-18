@@ -19,4 +19,19 @@ config.resolver.blockList = [
   new RegExp(`^${serverDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\${path.sep}.*$`),
 ];
 
+// Point react-native-svg to its DOM SVG web implementation on web builds
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && moduleName === 'react-native-svg') {
+    return {
+      filePath: path.resolve(__dirname, 'node_modules/react-native-svg/lib/module/ReactNativeSVG.web.js'),
+      type: 'sourceFile',
+    };
+  }
+  if (defaultResolveRequest) {
+    return defaultResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

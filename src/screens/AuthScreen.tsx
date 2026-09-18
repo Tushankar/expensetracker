@@ -12,7 +12,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorMessage, isApiError, useLogin, useRegister } from '@/api';
 import { HeaderGlow } from '@/components/home';
-import { Button, Icon, Input, SegmentedControl, Text, type SegmentOption } from '@/components/ui';
+import {
+  AmbientField,
+  Button,
+  Icon,
+  Input,
+  SegmentedControl,
+  Text,
+  type SegmentOption,
+} from '@/components/ui';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/theme';
 import { errorFeedback, successFeedback } from '@/utils/haptics';
@@ -112,7 +120,7 @@ export function AuthScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <AmbientField>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -294,6 +302,6 @@ export function AuthScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </AmbientField>
   );
 }

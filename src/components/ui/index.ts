@@ -1,4 +1,8 @@
-export { AmbientBackground, type AmbientBackgroundProps } from './AmbientBackground';
+export {
+  AmbientBackground,
+  AmbientField,
+  type AmbientBackgroundProps,
+} from './AmbientBackground';
 export { AnimatedAmount, type AnimatedAmountProps } from './AnimatedAmount';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
@@ -11,12 +15,14 @@ export { Divider } from './Divider';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorState, type ErrorStateProps } from './ErrorState';
 export {
-  GlassBackdropProvider,
   GlassFill,
+  GlassProvider,
   GlassSurface,
+  GlassTargetOverride,
   Gloss,
   PressWash,
   useGlassBackdrop,
+  useGlassContext,
   useGlassMode,
   type GlassMode,
   type GlassSurfaceProps,

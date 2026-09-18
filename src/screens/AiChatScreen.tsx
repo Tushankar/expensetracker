@@ -24,6 +24,8 @@ import { ChatBubble, SuggestionChips, ThinkingBubble } from '@/components/insigh
 import {
   Button,
   Card,
+  AmbientField,
+  GlassFill,
   Icon,
   IconButton,
   Input,
@@ -140,9 +142,9 @@ export function AiChatScreen() {
   const canSend = draft.trim().length > 0 && !ask.isPending;
 
   return (
-    // Unpainted, like every other screen: the ambient field shows through and the
-    // header and composer blur it as the thread slides between them.
-    <View style={{ flex: 1 }}>
+    // Its own field, like every other screen: the header and the composer blur it
+    // as the thread slides between them.
+    <AmbientField>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -337,7 +339,7 @@ export function AiChatScreen() {
       </KeyboardAvoidingView>
 
       <DateRangeSheet
-        key={rangeSession}
+        key={`aichat-range-sheet-${rangeSession}`}
         visible={rangeOpen}
         value={selection}
         onClose={() => setRangeOpen(false)}
@@ -346,7 +348,7 @@ export function AiChatScreen() {
           setRangeOpen(false);
         }}
       />
-    </View>
+    </AmbientField>
   );
 }
 

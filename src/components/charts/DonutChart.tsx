@@ -111,9 +111,9 @@ export function DonutChart({
       <Svg width={size} height={size}>
         {gradient ? (
           <Defs>
-            {segments.map((segment) => (
+            {segments.map((segment, index) => (
               <LinearGradient
-                key={segment.key}
+                key={`donut-grad-${segment.key || segment.label || index}-${index}`}
                 id={`${gradientId}-${segment.key}`}
                 x1="0"
                 y1="0"
@@ -141,7 +141,7 @@ export function DonutChart({
             fill="none"
           />
 
-          {segments.map((segment) => {
+          {segments.map((segment, index) => {
             const length = Math.max(0, segment.share) * circumference;
             const start = consumed;
             consumed += length;
@@ -176,7 +176,7 @@ export function DonutChart({
 
             return (
               <Circle
-                key={segment.key}
+                key={`donut-arc-${segment.key || segment.label || index}-${index}`}
                 cx={size / 2}
                 cy={size / 2}
                 r={radius}

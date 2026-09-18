@@ -124,7 +124,7 @@ src/
   theme/        Tokens + ThemeProvider
   components/
     ui/         Design-system primitives — the only things screens compose from
-    charts/     Donut, ring, bars, sparkline
+    charts/     Donut, ring, bars, sparkline — all on glass tracks
     icons/      Icon path registry (data only)
     home/       Home composites
     dashboard/  Period selector, budget snapshot, upcoming strip
@@ -516,6 +516,45 @@ take a copy out. There is no local database to get out of step.
 
 **Everything visual comes from `useTheme()`.** No hard-coded colours, sizes or spacing.
 
+**Every surface is glass.** Cards, sheets, the tab bar, inputs, chips, chart tracks —
+all of them are translucent panes floating over a drifting field of colour, which is
+what they refract. The system has three parts:
+
+- `theme/glass.ts` is a seven-rung ladder of materials, from `ultraThin` (chips and
+  badges) through `regular` (the default card) to `chrome` (anything with live content
+  sliding under it), plus `brand` and `hero`. A surface picks the rung that matches how
+  much it needs to separate from what is behind it.
+- `components/ui/GlassSurface.tsx` draws one. Five layers: a backdrop filter, a tint
+  wash that gives the material its colour, a diagonal sheen, a hairline rim lit along
+  the top and shaded along the bottom, then the content. Take any one away and it stops
+  looking like glass. `GlassFill` is the same thing as a full-bleed layer for a
+  container that owns its own shape, and `Gloss` is the light without the translucency,
+  for surfaces that have to stay solid — the primary button, the add action.
+- `components/ui/AmbientBackground.tsx` is the field itself: four very large, very faint
+  blooms drifting over 30 seconds. It is load-bearing rather than decorative. A frosted
+  panel over a flat black canvas is indistinguishable from a slightly grey panel,
+  because there is nothing there for it to refract.
+
+**The body of the glass is dark; only its edges are white.** A white wash is the
+intuitive way to make a panel look frosted, and on a dark app it is the way to ruin it:
+white at 8% over the colour field takes a caption to 2.9:1, and a screen of pale grey
+boxes reads as fog. So the fill is the ink ramp held back from opacity, and the white
+lives in the rim and the sheen, where the light on real glass actually is.
+
+**It degrades in two steps, and `Settings → Design system` says which one you are on.**
+iOS 26 gets real Liquid Glass through `expo-glass-effect`, and our own layers pull back
+to a whisper so they tint that material rather than bury it. Everything else with a
+backdrop filter gets `expo-blur`. Reduce Transparency and pre-31 Android get a flat
+colour from the ink ramp — the same place in the hierarchy, drawn a different way. The
+expensive Android blur path is reserved for `chrome`, because a screen of individually
+blurring cards costs far more than it shows.
+
+**Screens carry their own field, and the navigator paints nothing.** A pushed screen has
+to be opaque or a native stack transition lets you read two screens at once, so `Screen`
+mounts an `AmbientField` rather than inheriting the root one. That is also why every
+glass surface clips: `Card` sets `overflow: 'hidden'`, which keeps the corner blooms
+inside the cards they belong to.
+
 **Dark-only, three accents** — Violet, Emerald, Crimson, switchable in Settings. An
 accent is not just a brand colour: it tints the whole neutral ramp, so a violet build
 has violet-cast greys. Components must never branch on `theme.accent`; read tokens and
@@ -543,8 +582,16 @@ state on one screen, including the keypad and the calendar.
 
 ## Accessibility
 
-- Measured against `surface`: `textSecondary` 7.2:1, `textTertiary` 4.8:1, `brandText`
-  6.4:1, white on `brand` 4.8:1 — all clear WCAG AA.
+- Text tones are set from a measurement, not by eye. The binding case is the brightest
+  surface the glass can produce: the peak of a bloom, under the palest rung, on the
+  platform whose fallback lightens a near-black field instead of darkening it. Across
+  all three accents and all seven rungs, the floor is `textSecondary` 5.0:1,
+  `textTertiary` 4.7:1, `brandText` on accent glass 4.6:1 and white on the hero 10.1:1 —
+  all clear WCAG AA. `theme/glass.ts` and the `textTertiary` entries in `theme/palette.ts`
+  both carry notes to this effect; lowering either takes a caption under AA.
+- Reduce Transparency is honoured, not approximated: every surface switches to a solid
+  fill from the ink ramp, and the subscription lives once in `GlassProvider` rather than
+  in each of the forty pieces of glass on a screen.
 - Every animation honours the OS "reduce motion" setting.
 - Screens are safe-area aware top and bottom, including Android edge-to-edge.
 - Errors are announced: form-level messages sit in `accessibilityLiveRegion`, and

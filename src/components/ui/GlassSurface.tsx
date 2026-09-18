@@ -40,29 +40,74 @@ import {
 export type GlassMode = 'native' | 'blur' | 'opaque';
 
 /**
- * Android blurs a *target view*, not whatever happens to be underneath — so every
- * glass surface needs a handle on the thing it is supposed to be refracting. The
- * ambient background publishes that handle here; without one, `expo-blur` warns
- * and silently degrades, so we check before ever asking for a blur method.
+ * Every glass layer, everywhere in this file: full-bleed and untouchable.
+ *
+ * `pointerEvents` lives in the style rather than in a prop because half of these
+ * layers are native or third-party views, where only the style form is guaranteed
+ * to be applied.
  */
-const GlassBackdropContext = createContext<RefObject<View | null> | null>(null);
+const layerStyle: ViewStyle = { ...StyleSheet.absoluteFill, pointerEvents: 'none' };
 
-export const GlassBackdropProvider = GlassBackdropContext.Provider;
+/**
+ * Whether iOS 26 Liquid Glass is available. Resolved once, and defensively.
+ *
+ * The check reaches into a native module, which means a dev client or a store
+ * build made before `expo-glass-effect` was added throws instead of answering.
+ * The correct answer in that case is simply no, and the app then renders the
+ * backdrop-blur path it would have used on any earlier iOS.
+ */
+const LIQUID_GLASS = (() => {
+  try {
+    return isLiquidGlassAvailable();
+  } catch {
+    return false;
+  }
+})();
+
+type GlassContextValue = {
+  /**
+   * The view Android is to blur.
+   *
+   * Android blurs a *target view*, not whatever happens to be underneath, so every
+   * glass surface needs a handle on the thing it is meant to be refracting. Without
+   * one, `expo-blur` warns and silently degrades, so we check before ever asking
+   * for a blur method. `null` means there is nothing samplable from here.
+   */
+  target: RefObject<View | null> | null;
+  /** The OS has been asked for solid backgrounds. Nothing may be see-through. */
+  reduceTransparency: boolean;
+};
+
+const GlassContext = createContext<GlassContextValue>({
+  target: null,
+  reduceTransparency: false,
+});
+
+export function useGlassContext(): GlassContextValue {
+  return useContext(GlassContext);
+}
 
 export function useGlassBackdrop(): RefObject<View | null> | null {
-  return useContext(GlassBackdropContext);
+  return useGlassContext().target;
 }
 
 /**
- * Whether the glass may actually be see-through.
+ * Publishes the blur target and watches Reduce Transparency, once, for the whole
+ * app.
  *
- * Reduce Transparency is the whole reason this is a hook rather than a constant:
- * somebody who has asked the system for solid backgrounds should get solid
- * backgrounds, and the setting can change while the app is open.
+ * Both of those belong to the app rather than to a surface, and the subscription
+ * in particular has to live here: a screen can hold forty pieces of glass, and
+ * forty listeners on the same accessibility flag is forty native round trips to
+ * learn the same thing.
  */
-export function useGlassMode(): GlassMode {
+export function GlassProvider({
+  target,
+  children,
+}: {
+  target: RefObject<View | null> | null;
+  children: ReactNode;
+}) {
   const [reduceTransparency, setReduceTransparency] = useState(false);
-  const backdrop = useGlassBackdrop();
 
   useEffect(() => {
     let active = true;
@@ -82,8 +127,37 @@ export function useGlassMode(): GlassMode {
     };
   }, []);
 
+  const value = useMemo(() => ({ target, reduceTransparency }), [target, reduceTransparency]);
+
+  return <GlassContext.Provider value={value}>{children}</GlassContext.Provider>;
+}
+
+/**
+ * Swaps out the blur target for a subtree, keeping everything else.
+ *
+ * A modal is its own native window on Android, and a blur cannot reach across into
+ * the window it is sitting on top of — so the sheet passes `null` there and every
+ * surface inside it falls back to a solid fill.
+ */
+export function GlassTargetOverride({
+  target,
+  children,
+}: {
+  target: RefObject<View | null> | null;
+  children: ReactNode;
+}) {
+  const parent = useGlassContext();
+  const value = useMemo(() => ({ ...parent, target }), [parent, target]);
+
+  return <GlassContext.Provider value={value}>{children}</GlassContext.Provider>;
+}
+
+/** How glass will be drawn here, given the platform and the accessibility flags. */
+export function useGlassMode(): GlassMode {
+  const { target: backdrop, reduceTransparency } = useGlassContext();
+
   if (reduceTransparency) return 'opaque';
-  if (isLiquidGlassAvailable()) return 'native';
+  if (LIQUID_GLASS) return 'native';
 
   // Android below 31 has no cheap backdrop blur, and `expo-blur` there renders a
   // flat translucent panel anyway — which is exactly what `opaque` already does,
@@ -224,32 +298,28 @@ export function GlassSurface({
     <View testID={testID} pointerEvents={pointerEvents} style={[shell, elevation, style]}>
       {mode === 'native' ? (
         <GlassView
-          style={StyleSheet.absoluteFill}
+          style={layerStyle}
           glassEffectStyle={layer.nativeStyle}
           tintColor={tint ?? layer.nativeTint}
           isInteractive={interactive}
           // The app is dark-only, so the material must not follow the system.
           colorScheme="dark"
-          pointerEvents="none"
         />
       ) : (
         <BlurView
-          style={StyleSheet.absoluteFill}
+          style={layerStyle}
           tint={layer.blurTint}
           intensity={layer.intensity}
           blurReductionFactor={layer.blurReduction}
           {...(androidBlur
             ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurTarget: backdrop }
             : null)}
-          pointerEvents="none"
         />
       )}
 
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} pointerEvents="none" />
+      <View style={[layerStyle, { backgroundColor: fill }]} />
 
-      {tint && mode !== 'native' ? (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} pointerEvents="none" />
-      ) : null}
+      {tint && mode !== 'native' ? <View style={[layerStyle, { backgroundColor: tint }]} /> : null}
 
       {sheen ? (
         <LinearGradient
@@ -259,16 +329,14 @@ export function GlassSurface({
           // than as a gradient that happens to start where the box does.
           start={{ x: 0.08, y: 0 }}
           end={{ x: 0.92, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+          style={layerStyle}
         />
       ) : null}
 
       {rim ? (
         <View
-          pointerEvents="none"
           style={[
-            StyleSheet.absoluteFill,
+            layerStyle,
             shape,
             {
               borderWidth: theme.layout.hairline,
@@ -360,18 +428,18 @@ export function Gloss({ radius, corners, strength = 'soft', rim = true, style }:
     : { borderRadius: corner };
 
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+    <View style={[layerStyle, style]}>
       <LinearGradient
         colors={gloss.colors as unknown as readonly [string, string, string]}
         locations={gloss.locations as unknown as readonly [number, number, number]}
         start={{ x: 0.15, y: 0 }}
         end={{ x: 0.85, y: 1 }}
-        style={[StyleSheet.absoluteFill, shape]}
+        style={[layerStyle, shape]}
       />
       {rim ? (
         <View
           style={[
-            StyleSheet.absoluteFill,
+            layerStyle,
             shape,
             {
               borderWidth: theme.layout.hairline,
@@ -407,9 +475,8 @@ export function PressWash({ progress, radius, corners }: PressWashProps) {
 
   return (
     <Animated.View
-      pointerEvents="none"
       style={[
-        StyleSheet.absoluteFill,
+        layerStyle,
         style,
         corners
           ? {

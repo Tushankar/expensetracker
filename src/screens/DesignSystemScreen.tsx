@@ -9,6 +9,8 @@ import {
   Card,
   EmptyState,
   ErrorState,
+  GlassSurface,
+  Gloss,
   Icon,
   Input,
   Keypad,
@@ -19,11 +21,29 @@ import {
   Skeleton,
   SkeletonRow,
   Text,
+  useGlassMode,
 } from '@/components/ui';
 import { BudgetRow } from '@/components/budgets/BudgetRow';
 import type { BudgetProgress } from '@/api/types';
-import { useTheme, type TypeVariant } from '@/theme';
+import { useTheme, type GlassTone, type TypeVariant } from '@/theme';
 import { RUPEE, applyAmountKey, formatAmountInput } from '@/utils/currency';
+
+/**
+ * The glass ladder, thinnest first.
+ *
+ * The order matters more than the labels: these are meant to be legible as a
+ * sequence, and a rung that does not read as thicker than the one above it is a
+ * rung that is doing no work.
+ */
+const GLASS_TONES: { tone: GlassTone; note: string }[] = [
+  { tone: 'ultraThin', note: 'Chips, badges, inert pills' },
+  { tone: 'thin', note: 'Nested panels, fields, chart tracks' },
+  { tone: 'regular', note: 'Cards. The default' },
+  { tone: 'thick', note: 'Raised controls, toasts' },
+  { tone: 'chrome', note: 'Tab bar, sheets, sticky headers' },
+  { tone: 'brand', note: 'Selected and brand-owned surfaces' },
+  { tone: 'hero', note: 'The balance slab' },
+];
 
 const TYPE_SAMPLES: { variant: TypeVariant; label: string }[] = [
   { variant: 'display', label: 'Display' },
@@ -94,6 +114,12 @@ const BUDGET_SAMPLES: BudgetProgress[] = [
 
 type StateDemo = 'loading' | 'empty' | 'error';
 
+const GLASS_MODE_LABEL: Record<ReturnType<typeof useGlassMode>, string> = {
+  native: 'Liquid Glass',
+  blur: 'Backdrop blur',
+  opaque: 'Solid fallback',
+};
+
 const STATE_OPTIONS = [
   { value: 'loading' as const, label: 'Loading' },
   { value: 'empty' as const, label: 'Empty' },
@@ -109,6 +135,7 @@ const STATE_OPTIONS = [
  */
 export function DesignSystemScreen() {
   const theme = useTheme();
+  const glassMode = useGlassMode();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [stateDemo, setStateDemo] = useState<StateDemo>('loading');
   const [email, setEmail] = useState('');
@@ -119,6 +146,58 @@ export function DesignSystemScreen() {
   return (
     <Screen topInset={false} bottomInset={theme.spacing.xxl} testID="design-system-screen">
       <View style={{ marginTop: theme.spacing.sm }}>
+        <SectionHeader title="Glass" />
+        <Card radius="xl">
+          <View style={{ gap: theme.spacing.md }}>
+            {/* Which of the three renderers is in play changes what every surface
+                below looks like, so the gallery says so out loud rather than
+                leaving anyone to guess why the blur has gone. */}
+            <Badge label={GLASS_MODE_LABEL[glassMode]} tone="brand" />
+
+            {GLASS_TONES.map(({ tone, note }) => (
+              <GlassSurface
+                key={tone}
+                tone={tone}
+                radius="md"
+                padding={theme.spacing.md}
+                style={{ gap: 2 }}
+              >
+                <Text variant="labelSm">{tone}</Text>
+                <Text variant="caption" tone="tertiary">
+                  {note}
+                </Text>
+              </GlassSurface>
+            ))}
+
+            <Text variant="caption" tone="tertiary" style={{ marginTop: theme.spacing.sm }}>
+              Gloss — the same light on a surface that has to stay solid
+            </Text>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+              {(['soft', 'bright'] as const).map((strength) => (
+                <View
+                  key={strength}
+                  style={{
+                    flex: 1,
+                    height: 56,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: theme.radius.md,
+                    backgroundColor: theme.colors.brand,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Gloss radius="md" strength={strength} />
+                  <Text variant="labelSm" color={theme.colors.textOnAccent}>
+                    {strength}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </Card>
+      </View>
+
+      <View style={{ marginTop: theme.spacing.xxxl }}>
         <SectionHeader title="Typography" />
         <Card radius="xl">
           <View style={{ gap: theme.spacing.lg }}>

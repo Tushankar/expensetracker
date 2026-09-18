@@ -102,7 +102,7 @@ export function RecurringScreen() {
         loadingFallback={
           <View>
             {Array.from({ length: 4 }, (_, index) => (
-              <SkeletonRow key={index} />
+              <SkeletonRow key={`rec-skeleton-${index}`} />
             ))}
           </View>
         }

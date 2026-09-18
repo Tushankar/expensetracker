@@ -34,6 +34,19 @@ SplashScreen.setOptions({ duration: 300, fade: true });
 // away every cached query and refetch the whole app.
 const queryClient = createQueryClient();
 
+if (__DEV__) {
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    originalError(...args);
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('Encountered two children with the same key')
+    ) {
+      originalError('>>> [KEY COLLISION STACK]:\n' + new Error().stack);
+    }
+  };
+}
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,

@@ -1,7 +1,7 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { Fragment, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ACCOUNT_TYPE_LABEL, useAccounts, type Account } from '@/api';
 import { QueryState } from '@/components/data/QueryState';
@@ -34,7 +34,7 @@ import { formatINR } from '@/utils/currency';
 export function AccountsScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const openAddSheet = useUiStore((state) => state.openAddSheet);
 
   const [showArchived, setShowArchived] = useState(false);
@@ -54,7 +54,7 @@ export function AccountsScreen() {
 
   return (
     <Screen
-      bottomInset={tabBarHeight + theme.spacing.lg}
+      bottomInset={insets.bottom + theme.spacing.xl}
       testID="accounts-screen"
       refreshControl={
         <RefreshControl

@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeBottomTabBarHeight } from '@/navigation/useSafeTabBarHeight';
 import { useNavigation } from '@react-navigation/native';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
@@ -54,7 +54,7 @@ const TREND_MONTHS = 6;
 export function InsightsScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
 
   const [selection, setSelection] = useState<PeriodSelection>({ period: 'month' });
   const [periodOffset, setPeriodOffset] = useState(0);
@@ -359,7 +359,7 @@ export function InsightsScreen() {
                     <Card padding={0} radius="xl">
                       <View style={{ paddingHorizontal: theme.spacing.lg }}>
                         {movers.map((entry, index) => (
-                          <Fragment key={entry.categoryId ?? entry.name}>
+                          <Fragment key={`mover-${entry.categoryId || entry.name || index}-${index}`}>
                             {index > 0 ? <Divider /> : null}
                             <View
                               accessible
@@ -411,7 +411,7 @@ export function InsightsScreen() {
                     <Card padding={0} radius="xl">
                       <View style={{ paddingHorizontal: theme.spacing.lg }}>
                         {overview.largestExpenses.map((entry, index) => (
-                          <Fragment key={entry.id}>
+                          <Fragment key={`largest-${entry.id || index}-${index}`}>
                             {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
                             <View
                               accessible
@@ -455,7 +455,7 @@ export function InsightsScreen() {
       </Screen>
 
       <DateRangeSheet
-        key={rangeSession}
+        key={`insights-range-sheet-${rangeSession}`}
         visible={rangeOpen}
         value={selection}
         onClose={() => setRangeOpen(false)}

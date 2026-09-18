@@ -53,7 +53,7 @@ export function RecurringAnalyticsCard({ recurringSummary }: RecurringAnalyticsC
               UPCOMING THIS MONTH
             </Text>
             {upcoming.slice(0, 5).map((item, index) => (
-              <Fragment key={item.id}>
+              <Fragment key={`upcoming-rec-${item.id || index}-${index}`}>
                 {index > 0 ? <Divider /> : null}
                 <View
                   style={{

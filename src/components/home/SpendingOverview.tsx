@@ -230,9 +230,9 @@ export function SpendingOverview({
             gap: theme.spacing.sm,
           }}
         >
-          {segments.map((segment) => (
+          {segments.map((segment, index) => (
             <CategoryCard
-              key={segment.key}
+              key={`cat-card-${segment.key || segment.label || index}-${index}`}
               label={segment.label}
               group={segment.group}
               icon={segment.icon}

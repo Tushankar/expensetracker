@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { useTheme } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
+import { Gloss } from './GlassSurface';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
@@ -250,8 +251,14 @@ export function Calendar({
                   borderWidth: !selected && isToday ? theme.layout.hairline : 0,
                   borderColor: theme.colors.borderStrong,
                   opacity: disabled ? 0.28 : 1,
+                  overflow: 'hidden',
                 }}
               >
+                {/* A selected day is a solid bead of brand and a heat-mapped one a
+                    tinted pane, so both take the light. An unmarked day has no
+                    fill to catch it and gets nothing. */}
+                {selected || marker ? <Gloss radius={18} rim={!selected} /> : null}
+
                 <Text
                   variant="bodySm"
                   color={selected ? theme.colors.textOnAccent : theme.colors.textPrimary}

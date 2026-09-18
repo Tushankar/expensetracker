@@ -25,7 +25,7 @@ export function TopMerchantsCard({ merchants, totalExpenses = 0 }: TopMerchantsC
         {merchants.map((item, index) => {
           const share = totalExpenses > 0 ? Math.round((item.totalSpent / totalExpenses) * 100) : null;
           return (
-            <Fragment key={item.merchant}>
+            <Fragment key={`top-merchant-${item.merchant || index}-${index}`}>
               {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
               <View
                 accessible

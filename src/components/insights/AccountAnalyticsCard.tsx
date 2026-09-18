@@ -26,7 +26,7 @@ export function AccountAnalyticsCard({ accounts }: AccountAnalyticsCardProps) {
     <Card padding={0} radius="xl">
       <View style={{ paddingHorizontal: theme.spacing.lg }}>
         {activeAccounts.map((acc, index) => (
-          <Fragment key={acc.accountId}>
+          <Fragment key={`account-stat-${acc.accountId || index}-${index}`}>
             {index > 0 ? <Divider inset={36 + theme.spacing.md} /> : null}
             <View
               accessible

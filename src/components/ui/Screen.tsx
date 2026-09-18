@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
+import { AmbientField } from './AmbientBackground';
+
 export type ScreenProps = {
   children: ReactNode;
   /** Wrap content in a ScrollView. Turn off for screens that own a FlatList. */
@@ -33,10 +35,10 @@ export type ScreenProps = {
  * width so the layout does not stretch into unreadable lines on tablets or the
  * web build.
  *
- * It paints nothing. The background is the app-wide ambient colour field mounted
- * above the window in `AmbientBackground`, and every surface on the screen is a
- * piece of glass floating over it — so a screen that painted its own fill would
- * flatten the whole effect.
+ * The background is the ambient colour field, which the screen carries itself
+ * rather than inheriting: a pushed screen has to be opaque or a native stack
+ * transition lets you read two screens at once, and an opaque flat fill would
+ * leave the glass above it with nothing to refract. See `AmbientField`.
  */
 export function Screen({
   children,
@@ -67,14 +69,16 @@ export function Screen({
 
   if (!scroll) {
     return (
-      <View testID={testID} style={[styles.root, style]}>
-        <View style={[content, styles.flex, scrollPadding, contentContainerStyle]}>{children}</View>
-      </View>
+      <AmbientField testID={testID} style={style}>
+        <View style={[content, styles.flex, scrollPadding, contentContainerStyle]}>
+          {children}
+        </View>
+      </AmbientField>
     );
   }
 
   return (
-    <View testID={testID} style={[styles.root, style]}>
+    <AmbientField testID={testID} style={style}>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[content, scrollPadding, contentContainerStyle]}
@@ -86,12 +90,11 @@ export function Screen({
       >
         {children}
       </ScrollView>
-    </View>
+    </AmbientField>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
   flex: { flex: 1 },
   content: {
     flexGrow: 1,

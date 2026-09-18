@@ -201,7 +201,7 @@ export function NotificationsScreen() {
         loadingFallback={
           <View>
             {Array.from({ length: 4 }, (_, index) => (
-              <SkeletonRow key={index} />
+              <SkeletonRow key={`notif-skeleton-${index}`} />
             ))}
           </View>
         }

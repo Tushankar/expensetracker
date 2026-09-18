@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -115,12 +116,20 @@ export function TabBar({ state, descriptors, navigation, onAddPress }: TabBarPro
           paddingBottom: bottomPad,
         }}
       >
-        {routes.slice(0, half).map((route, index) => renderTab(route, index))}
-
-        {/* Reserves the add button's footprint so the tabs stay evenly spaced. */}
-        <View style={{ width: FAB_SIZE + theme.spacing.lg, pointerEvents: 'none' }} />
-
-        {routes.slice(half).map((route, index) => renderTab(route, index + half))}
+        {routes.map((route, index) => {
+          const isAtHalf = index === half;
+          return (
+            <Fragment key={route.key || `tab-${route.name}-${index}`}>
+              {isAtHalf ? (
+                <View
+                  key="fab-spacer"
+                  style={{ width: FAB_SIZE + theme.spacing.lg, pointerEvents: 'none' }}
+                />
+              ) : null}
+              {renderTab(route, index)}
+            </Fragment>
+          );
+        })}
       </View>
 
       <View style={[styles.fabWrap, styles.passThrough]}>

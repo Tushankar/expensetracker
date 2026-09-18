@@ -51,8 +51,8 @@ export function toBreakdown(
 ): CategorySlice[] {
   if (total <= 0 || entries.length === 0) return [];
 
-  const headline = entries.slice(0, headlineCount).map((entry) => ({
-    key: entry.key,
+  const headline = entries.slice(0, headlineCount).map((entry, index) => ({
+    key: entry.key || entry.label || `slice-${index}`,
     label: entry.label,
     color: entry.color,
     amount: entry.amount,

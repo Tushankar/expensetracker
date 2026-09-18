@@ -156,7 +156,7 @@ export function BudgetSnapshot({
           ) : null}
 
           {preview.map((budget, index) => (
-            <Fragment key={budget.id}>
+            <Fragment key={`budget-snap-${budget.id || index}-${index}`}>
               {index > 0 ? <Divider /> : null}
               <BudgetRow budget={budget} />
             </Fragment>

@@ -56,7 +56,7 @@ export function ThinkingBubble({ label = 'Reading your transactions…' }: Think
     >
       <View style={{ flexDirection: 'row', gap: 4 }}>
         {DOTS.map((index) => (
-          <Dot key={index} index={index} />
+          <Dot key={`thinking-dot-${index}`} index={index} />
         ))}
       </View>
       <Text variant="bodySm" tone="tertiary">

@@ -33,7 +33,7 @@ export function BudgetAnalyticsCard({ budgetStatus }: BudgetAnalyticsCardProps) 
           const progressPercent = Math.min(100, Math.max(0, item.percent));
 
           return (
-            <Fragment key={item.id}>
+            <Fragment key={`budget-status-${item.id || index}-${index}`}>
               {index > 0 ? (
                 <View style={{ marginVertical: theme.spacing.sm }}>
                   <Divider />

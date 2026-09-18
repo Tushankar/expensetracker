@@ -167,7 +167,7 @@ export function BudgetRow({ budget, onPress, compact = false }: BudgetRowProps) 
               bottom: 0,
               width: 2,
               borderRadius: 1,
-              backgroundColor: theme.colors.background,
+              backgroundColor: theme.colors.overlay,
               opacity: 0.85,
             }}
           />

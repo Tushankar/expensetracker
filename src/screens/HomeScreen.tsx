@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeBottomTabBarHeight } from '@/navigation/useSafeTabBarHeight';
 import { useNavigation } from '@react-navigation/native';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { RefreshControl, useWindowDimensions, View } from 'react-native';
@@ -62,7 +62,7 @@ const DIVIDER_INSET = 44 + 12;
 export function HomeScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const { width } = useWindowDimensions();
 
   const user = useAuthStore((state) => state.user);
@@ -348,7 +348,7 @@ export function HomeScreen() {
                 }}
               >
                 {recentQuery.transactions.map((transaction, index) => (
-                  <Fragment key={transaction.id}>
+                  <Fragment key={`home-tx-${transaction.id || index}-${index}`}>
                     {index > 0 ? <Divider inset={DIVIDER_INSET} /> : null}
                     <TransactionRow
                       transaction={transaction}
@@ -372,7 +372,7 @@ export function HomeScreen() {
       </Screen>
 
       <DateRangeSheet
-        key={rangeSession}
+        key={`home-range-sheet-${rangeSession}`}
         visible={rangeOpen}
         value={selection}
         onClose={() => setRangeOpen(false)}

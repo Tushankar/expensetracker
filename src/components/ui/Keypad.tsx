@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { useTheme } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
+import { GlassFill, PressWash } from './GlassSurface';
 import { Icon } from './Icon';
 import { Text } from './Text';
 import { usePressAnimation } from './usePressAnimation';
@@ -59,7 +60,7 @@ type KeyProps = {
 
 function Key({ value, onPress, onLongPress }: KeyProps) {
   const theme = useTheme();
-  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation(0.93);
+  const { animatedStyle, progress, onPressIn, onPressOut } = usePressAnimation(0.93);
 
   const isBackspace = value === 'back';
   const label = isBackspace ? 'Delete' : value === '.' ? 'Decimal point' : value;
@@ -86,10 +87,16 @@ function Key({ value, onPress, onLongPress }: KeyProps) {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: theme.radius.md,
-            backgroundColor: theme.colors.surfaceMuted,
+            overflow: 'hidden',
           },
         ]}
       >
+        {/* Twelve keys, so no blur: `thin` glass at this size is carried entirely
+            by its lit edge, and twelve backdrop filters under a thumb that is
+            about to hit them four times in a row is not a trade worth making. */}
+        <GlassFill tone="thin" radius="md" backdropBlur={false} />
+        <PressWash progress={progress} radius="md" />
+
         {isBackspace ? (
           <Icon name="close" size={20} color={theme.colors.textSecondary} strokeWidth={2.2} />
         ) : (

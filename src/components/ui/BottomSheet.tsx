@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
-import { GlassBackdropProvider, GlassSurface, useGlassBackdrop } from './GlassSurface';
+import { GlassSurface, GlassTargetOverride, useGlassBackdrop } from './GlassSurface';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
@@ -230,7 +230,7 @@ export function BottomSheet({
                 context puts every glass surface inside the sheet — including the
                 sheet — onto its solid fallback on that platform, rather than
                 letting `expo-blur` warn once per surface and degrade anyway. */}
-            <GlassBackdropProvider value={Platform.OS === 'android' ? null : glassTarget}>
+            <GlassTargetOverride target={Platform.OS === 'android' ? null : glassTarget}>
               <GlassSurface
                 tone="chrome"
                 shadow="lg"
@@ -319,7 +319,7 @@ export function BottomSheet({
                 </View>
               ) : null}
               </GlassSurface>
-            </GlassBackdropProvider>
+            </GlassTargetOverride>
           </Animated.View>
         </KeyboardAvoidingView>
       </GestureHandlerRootView>

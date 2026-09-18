@@ -1,7 +1,16 @@
 import { Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { Icon, Text, usePressAnimation, withAlpha, type IconName } from '@/components/ui';
+import {
+  GlassFill,
+  Gloss,
+  Icon,
+  PressWash,
+  Text,
+  usePressAnimation,
+  withAlpha,
+  type IconName,
+} from '@/components/ui';
 import { useTheme, type ActionHue } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
@@ -74,7 +83,9 @@ export function QuickActions({ onAction }: QuickActionsProps) {
 
 function ActionTile({ action, onPress }: { action: ActionSpec; onPress: () => void }) {
   const theme = useTheme();
-  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation(theme.pressScale.card);
+  const { animatedStyle, progress, onPressIn, onPressOut } = usePressAnimation(
+    theme.pressScale.card,
+  );
 
   return (
     <Pressable
@@ -100,14 +111,21 @@ function ActionTile({ action, onPress }: { action: ActionSpec; onPress: () => vo
             gap: theme.spacing.sm,
             paddingHorizontal: 4,
             borderRadius: theme.radius.lg,
-            backgroundColor: theme.colors.surface,
-            borderWidth: theme.layout.hairline,
-            borderColor: theme.colors.border,
-            // A lighter top edge reads as a light source above the row.
-            borderTopColor: withAlpha(action.hue, 0.22),
+            overflow: 'hidden',
           },
         ]}
       >
+        {/* Each tile is glass tinted by its own action, and the rim is where that
+            tint lives: enough to tell the four apart at a glance, not enough to
+            turn a row of shortcuts into a row of coloured blocks. */}
+        <GlassFill
+          tone="regular"
+          radius="lg"
+          tint={withAlpha(action.hue, 0.07)}
+          rimColor={withAlpha(action.hue, 0.28)}
+        />
+        <PressWash progress={progress} radius="lg" />
+
         <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
@@ -120,8 +138,10 @@ function ActionTile({ action, onPress }: { action: ActionSpec; onPress: () => vo
             backgroundColor: withAlpha(action.hue, 0.16),
             borderWidth: theme.layout.hairline,
             borderColor: withAlpha(action.hue, 0.26),
+            overflow: 'hidden',
           }}
         >
+          <Gloss radius="sm" rim={false} />
           <Icon name={action.icon} size={19} color={action.hue} strokeWidth={2.2} />
         </View>
 
