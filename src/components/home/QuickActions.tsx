@@ -1,8 +1,7 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { Icon, Text, usePressAnimation, type IconName } from '@/components/ui';
+import { Icon, Text, usePressAnimation, withAlpha, type IconName } from '@/components/ui';
 import { useTheme, type ActionHue } from '@/theme';
 import { tapFeedback } from '@/utils/haptics';
 
@@ -14,8 +13,7 @@ type ActionSpec = {
   label: string;
   icon: IconName;
   hint: string;
-  gradient: readonly [string, string];
-  glowColor: string;
+  hue: string;
 };
 
 export type QuickActionsProps = {
@@ -23,10 +21,12 @@ export type QuickActionsProps = {
 };
 
 /**
- * Ultra-Premium Quick Actions.
+ * The four things someone opens this app to do.
  *
- * Designed with luminous frosted glass cards, Apple-style top specular highlights,
- * glowing gradient orbs with 1px glass rings, and high-readability typography.
+ * Each tile is one hue at low opacity rather than a saturated fill: four bright
+ * chips in a row compete with the balance card directly above them, and the
+ * balance is what the screen is for. Colour here is for recognition — you learn
+ * that income is green and stop reading the labels — not for emphasis.
  */
 export function QuickActions({ onAction }: QuickActionsProps) {
   const theme = useTheme();
@@ -34,35 +34,32 @@ export function QuickActions({ onAction }: QuickActionsProps) {
   const actions: readonly ActionSpec[] = [
     {
       key: 'expense',
-      label: 'Add Expense',
-      icon: 'plus',
+      label: 'Expense',
+      icon: 'minus',
       hint: 'Records money out',
-      gradient: [theme.colors.brand, theme.colors.brandPressed],
-      glowColor: theme.colors.brandGlow || 'rgba(16, 185, 129, 0.45)',
+      // Follows the active accent, because it is the action the app is built around.
+      hue: theme.colors.brandText,
     },
     {
       key: 'income',
-      label: 'Add Income',
+      label: 'Income',
       icon: 'arrowUpRight',
       hint: 'Records money in',
-      gradient: ['#06B6D4', '#0D9488'],
-      glowColor: 'rgba(6, 182, 212, 0.45)',
+      hue: theme.colors.positive,
     },
     {
       key: 'transfer',
       label: 'Transfer',
       icon: 'repeat',
       hint: 'Moves money between your accounts',
-      gradient: ['#8B5CF6', '#6D28D9'],
-      glowColor: 'rgba(139, 92, 246, 0.45)',
+      hue: theme.colors.warning,
     },
     {
       key: 'accounts',
       label: 'Accounts',
       icon: 'wallet',
       hint: 'Opens your accounts',
-      gradient: ['#F59E0B', '#D97706'],
-      glowColor: 'rgba(245, 158, 11, 0.45)',
+      hue: theme.colors.info,
     },
   ];
 
@@ -92,78 +89,45 @@ function ActionTile({ action, onPress }: { action: ActionSpec; onPress: () => vo
       accessibilityHint={action.hint}
       style={{ flex: 1, minWidth: 0 }}
     >
-      <Animated.View style={animatedStyle}>
-        <LinearGradient
-          colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.015)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[
-            theme.shadows.sm,
-            {
-              height: 88,
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              paddingHorizontal: 4,
-              borderRadius: theme.radius.lg,
-              backgroundColor: theme.colors.surfaceElevated,
-              borderWidth: 1,
-              borderColor: 'rgba(255, 255, 255, 0.08)',
-              borderTopColor: 'rgba(255, 255, 255, 0.18)',
-              overflow: 'hidden',
-            },
-          ]}
+      <Animated.View
+        style={[
+          animatedStyle,
+          theme.shadows.sm,
+          {
+            height: 86,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: theme.spacing.sm,
+            paddingHorizontal: 4,
+            borderRadius: theme.radius.lg,
+            backgroundColor: theme.colors.surface,
+            borderWidth: theme.layout.hairline,
+            borderColor: theme.colors.border,
+            // A lighter top edge reads as a light source above the row.
+            borderTopColor: withAlpha(action.hue, 0.22),
+          },
+        ]}
+      >
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: theme.radius.sm,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: withAlpha(action.hue, 0.16),
+            borderWidth: theme.layout.hairline,
+            borderColor: withAlpha(action.hue, 0.26),
+          }}
         >
-          {/* Luminous Glowing Gradient Orb */}
-          <View
-            style={{
-              shadowColor: action.glowColor,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.55,
-              shadowRadius: 8,
-              elevation: 5,
-            }}
-          >
-            <LinearGradient
-              colors={action.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.32)',
-              }}
-            >
-              <Icon
-                name={action.icon}
-                size={18}
-                color="#FFFFFF"
-                strokeWidth={2.4}
-              />
-            </LinearGradient>
-          </View>
+          <Icon name={action.icon} size={19} color={action.hue} strokeWidth={2.2} />
+        </View>
 
-          {/* Crisp, High-Contrast Modern Label */}
-          <Text
-            variant="caption"
-            align="center"
-            numberOfLines={2}
-            maxFontSizeMultiplier={1.3}
-            style={{
-              fontSize: 11.5,
-              lineHeight: 14,
-              fontWeight: '600',
-              color: theme.colors.textPrimary,
-              letterSpacing: -0.1,
-            }}
-          >
-            {action.label}
-          </Text>
-        </LinearGradient>
+        <Text variant="caption" align="center" numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          {action.label}
+        </Text>
       </Animated.View>
     </Pressable>
   );

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { TextInput, type TextInputProps, type TextStyle } from 'react-native';
+import { Platform, TextInput, type TextInputProps, type TextStyle } from 'react-native';
 import Animated, {
   useAnimatedProps,
   useReducedMotion,
@@ -8,7 +8,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useTheme, type TypeVariant } from '@/theme';
-import { RUPEE } from '@/utils/currency';
+import { formatINR, RUPEE } from '@/utils/currency';
+
+import { Text } from './Text';
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 
@@ -91,14 +93,43 @@ export function AnimatedAmount({
     return { text: `${negative ? '−' : ''}${RUPEE}${grouped}` };
   });
 
+  /**
+   * The web build takes a plain `Text`.
+   *
+   * Driving the figure through the native `text` prop is what keeps the count off
+   * the JS thread, and React Native Web's `TextInput` has no such prop to drive —
+   * it renders an `<input>` whose value stays at the empty string it was given,
+   * so the balance comes out as a blank gap the height of one line. A number that
+   * does not animate is a small loss; a number that does not appear is not.
+   */
+  if (Platform.OS === 'web') {
+    return (
+      <Text
+        variant={variant}
+        color={color}
+        accessibilityLabel={accessibilityLabel}
+        maxFontSizeMultiplier={1.2}
+        style={style}
+      >
+        {placeholder ?? formatINR(value)}
+      </Text>
+    );
+  }
+
   return (
     <AnimatedInput
       // A display element that happens to be an input. Everything that makes it
       // behave like one is turned off.
       editable={false}
       underlineColorAndroid="transparent"
-      // iOS refuses to render a TextInput's value without one on first paint.
-      value={placeholder ?? ''}
+      /**
+       * iOS refuses to render a TextInput's value without one on first paint, and
+       * this is the figure the whole screen is built around — so it seeds the real
+       * number rather than an empty string. `defaultValue` keeps the field
+       * uncontrolled, which is what leaves the native `text` prop free to drive
+       * the count; a `value` would fight it.
+       */
+      defaultValue={placeholder ?? formatINR(value)}
       animatedProps={props}
       accessible
       accessibilityLabel={accessibilityLabel}

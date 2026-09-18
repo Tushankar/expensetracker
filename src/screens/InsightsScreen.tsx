@@ -17,7 +17,6 @@ import {
   PeopleAnalyticsCard,
   RecurringAnalyticsCard,
   SpendingTrendCard,
-  StatGrid,
   TopMerchantsCard,
 } from '@/components/insights';
 import {
@@ -250,10 +249,6 @@ export function InsightsScreen() {
                 <SectionHeader title="Financial summary" />
                 <FinancialSummaryCard overview={overview} />
 
-                {/* Stat Grid */}
-                <View style={{ marginTop: theme.spacing.lg }}>
-                  <StatGrid overview={overview} />
-                </View>
 
                 {/* AI Observations / What stands out */}
                 {aiQuery.data && aiQuery.data.insights.length > 0 ? (

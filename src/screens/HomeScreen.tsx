@@ -237,7 +237,12 @@ export function HomeScreen() {
           >
             {periodSummary ? (
               <>
-                <BalanceCard summary={periodSummary} onPeriodPress={openRangeSheet} />
+                <BalanceCard
+                  summary={periodSummary}
+                  onPeriodPress={openRangeSheet}
+                  accountCount={accounts.length}
+                  onAccountsPress={() => navigation.navigate('Accounts')}
+                />
 
                 <View style={{ marginTop: theme.spacing.md }}>
                   <SavingsCard
@@ -288,6 +293,7 @@ export function HomeScreen() {
             <SpendingOverview
               spent={periodSummary.spent}
               breakdown={breakdown}
+              periodLabel={range.label}
               onSeeAll={() => navigation.navigate('Tabs', { screen: 'Transactions' })}
             />
           </View>

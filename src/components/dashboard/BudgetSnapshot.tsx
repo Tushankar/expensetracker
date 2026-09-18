@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fragment } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import type { BudgetSummary } from '@/api/types';
 import { BudgetRow } from '@/components/budgets/BudgetRow';
@@ -12,6 +13,7 @@ import {
   Icon,
   SectionHeader,
   Text,
+  type IconName,
 } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { formatINR } from '@/utils/currency';
@@ -29,10 +31,9 @@ const PREVIEW_COUNT = 3;
 /**
  * Budget progress, abridged for the dashboard.
  *
- * Transformed with high-level premium fintech aesthetics:
- * - When empty: renders a glowing LinearGradient card with Apple-style top specular highlights,
- *   smart budget badges, value-prop pills, and a perfectly aligned full-width CTA.
- * - When active: renders clean, elevated budget cards with state colors and unbudgeted highlights.
+ * With no caps set this is the one block on Home that has to sell something, so
+ * it gets the hero treatment. With caps set it gets out of the way: three rows,
+ * worst first, and a link to the tab that owns the detail.
  */
 export function BudgetSnapshot({
   summary,
@@ -50,6 +51,7 @@ export function BudgetSnapshot({
     return (
       <View>
         <SectionHeader title="Budgets" actionLabel="Create" onActionPress={onCreate} />
+
         <LinearGradient
           colors={[theme.colors.heroSurface, theme.colors.heroSurfaceEnd]}
           start={{ x: 0, y: 0 }}
@@ -60,129 +62,56 @@ export function BudgetSnapshot({
               borderRadius: theme.radius.xl,
               borderWidth: theme.layout.hairline,
               borderColor: theme.colors.heroBorder,
-              borderTopColor: 'rgba(255, 255, 255, 0.18)',
+              borderTopColor: 'rgba(255, 255, 255, 0.16)',
               overflow: 'hidden',
               padding: theme.spacing.xl,
-              gap: theme.spacing.md,
             },
           ]}
         >
-          {/* Header row with badge and month */}
+          <SnapshotBloom color={theme.colors.brandText} />
+
           <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
           >
-            <Badge label="SMART BUDGETS" tone="positive" />
+            <Badge label="Smart budgeting" tone="brand" />
             <Text variant="caption" color={theme.colors.heroTextMuted}>
               {monthLabel}
             </Text>
           </View>
 
-          {/* Title and copy */}
-          <View style={{ gap: 4 }}>
-            <Text variant="h2" color={theme.colors.heroText}>
-              Take Control of Your Spending
-            </Text>
-            <Text
-              variant="bodySm"
-              color={theme.colors.heroTextMuted}
-              style={{ lineHeight: 20 }}
-            >
-              Set category caps to track real-time pacing with proactive alerts at 80% and 100% capacity — before you go over.
-            </Text>
-          </View>
+          <Text variant="h2" color={theme.colors.heroText} style={{ marginTop: theme.spacing.lg }}>
+            Decide where the month goes
+          </Text>
+          <Text
+            variant="bodySm"
+            color={theme.colors.heroTextMuted}
+            style={{ marginTop: theme.spacing.xs, lineHeight: 20 }}
+          >
+            Set a cap and Paisa watches the pace — a nudge at 80%, a flag if you
+            cross it, and a safe daily figure in between.
+          </Text>
 
-          {/* 3 Value-Prop Frosted Feature Pills */}
           <View
             style={{
               flexDirection: 'row',
-              gap: theme.spacing.xs,
               flexWrap: 'wrap',
-              marginVertical: 2,
+              gap: theme.spacing.xs,
+              marginTop: theme.spacing.lg,
             }}
           >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                backgroundColor: 'rgba(0, 0, 0, 0.28)',
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: theme.radius.pill,
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <Icon name="bell" size={12} color={theme.colors.brandText} />
-              <Text
-                variant="caption"
-                color={theme.colors.heroText}
-                style={{ fontSize: 11, fontWeight: '600' }}
-              >
-                80% Alert
-              </Text>
-            </View>
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                backgroundColor: 'rgba(0, 0, 0, 0.28)',
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: theme.radius.pill,
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <Icon name="clock" size={12} color={theme.colors.heroTextMuted} />
-              <Text
-                variant="caption"
-                color={theme.colors.heroText}
-                style={{ fontSize: 11, fontWeight: '600' }}
-              >
-                Daily Pace
-              </Text>
-            </View>
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                backgroundColor: 'rgba(0, 0, 0, 0.28)',
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: theme.radius.pill,
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <Icon name="target" size={12} color={theme.colors.heroTextMuted} />
-              <Text
-                variant="caption"
-                color={theme.colors.heroText}
-                style={{ fontSize: 11, fontWeight: '600' }}
-              >
-                Category Caps
-              </Text>
-            </View>
+            <HeroChip icon="bellAlert" label="80% alerts" />
+            <HeroChip icon="gauge" label="Daily pace" />
+            <HeroChip icon="shieldCheck" label="Category caps" />
           </View>
 
-          {/* Perfectly balanced, full-width Action Button */}
           <Button
-            label="✨ Create a Budget"
+            label="Set your first cap"
             onPress={onCreate}
             variant="brand"
             size="lg"
             fullWidth
-            leftIcon="plus"
-            style={{ marginTop: theme.spacing.xs }}
+            leftIcon="sparkle"
+            style={{ marginTop: theme.spacing.xl }}
           />
         </LinearGradient>
       </View>
@@ -193,15 +122,7 @@ export function BudgetSnapshot({
     <View>
       <SectionHeader title="Budgets" actionLabel="See all" onActionPress={onSeeAll} />
 
-      <Card
-        padding={0}
-        radius="xl"
-        style={{
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          borderTopColor: 'rgba(255, 255, 255, 0.14)',
-        }}
-      >
+      <Card padding={0} radius="xl">
         <View style={{ paddingHorizontal: theme.spacing.lg }}>
           <View
             style={{
@@ -212,7 +133,12 @@ export function BudgetSnapshot({
             }}
           >
             <Icon name="calendar" size={13} color={theme.colors.textTertiary} strokeWidth={2} />
-            <Text variant="caption" tone="tertiary" style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              variant="overline"
+              tone="tertiary"
+              numberOfLines={1}
+              style={{ flex: 1, minWidth: 0 }}
+            >
               {monthLabel}
             </Text>
             {summary.totals.unbudgetedSpend > 0 ? (
@@ -253,3 +179,71 @@ export function BudgetSnapshot({
     </View>
   );
 }
+
+function HeroChip({ icon, label }: { icon: IconName; label: string }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 10,
+        height: 28,
+        borderRadius: theme.radius.pill,
+        backgroundColor: theme.colors.heroTile,
+        borderWidth: theme.layout.hairline,
+        borderColor: theme.colors.heroTileBorder,
+      }}
+    >
+      <Icon name={icon} size={13} color={theme.colors.brandText} strokeWidth={2} />
+      <Text variant="caption" color={theme.colors.heroText}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/** Matches the bloom on the Budgets tab, so the two entry points feel like one thing. */
+function SnapshotBloom({ color }: { color: string }) {
+  return (
+    <Svg
+      width={300}
+      height={240}
+      style={styles.bloom}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Defs>
+        <RadialGradient id="budgetSnapshotBloom" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={0.22} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.05} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={230} cy={60} rx={150} ry={115} fill="url(#budgetSnapshotBloom)" />
+      <Circle
+        cx={238}
+        cy={52}
+        r={84}
+        stroke={color}
+        strokeOpacity={0.09}
+        strokeWidth={1}
+        fill="none"
+      />
+      <Circle
+        cx={238}
+        cy={52}
+        r={120}
+        stroke={color}
+        strokeOpacity={0.05}
+        strokeWidth={1}
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+const styles = StyleSheet.create({
+  bloom: { position: 'absolute', top: -40, right: -40, pointerEvents: 'none' },
+});

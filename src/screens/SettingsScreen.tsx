@@ -1,8 +1,10 @@
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
-import { Fragment, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useState, type ReactNode } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import {
   API_BASE_URL,
@@ -13,6 +15,7 @@ import {
   useSession,
   useUnreadCount,
   useUpdateNotificationPreferences,
+  type NotificationPreviewMode,
 } from '@/api';
 import {
   Badge,
@@ -22,10 +25,13 @@ import {
   IconTile,
   ListRow,
   Screen,
-  SectionHeader,
+  SegmentedControl,
   Text,
+  withAlpha,
   type IconName,
+  type SegmentOption,
 } from '@/components/ui';
+import type { ColorTokens } from '@/theme';
 import { ChangePasswordSheet } from '@/screens/sheets/ChangePasswordSheet';
 import { CloseAccountSheet } from '@/screens/sheets/CloseAccountSheet';
 import { EditProfileSheet } from '@/screens/sheets/EditProfileSheet';
@@ -42,6 +48,19 @@ import { exportWindow } from '@/utils/period';
  * 44dp wide and `ListRow` puts `spacing.md` between it and the text.
  */
 const DIVIDER_INSET = 44 + spacing.md;
+
+const PREVIEW_MODES: readonly SegmentOption<NotificationPreviewMode>[] = [
+  { value: 'private', label: 'Private' },
+  { value: 'basic', label: 'Basic' },
+  { value: 'detailed', label: 'Detailed' },
+];
+
+/** What each choice actually looks like on a locked phone. */
+const PREVIEW_HINTS: Record<NotificationPreviewMode, string> = {
+  private: 'Shows only that Paisa has something for you. No names, no amounts.',
+  basic: 'Shows the category or payee, but never the amount.',
+  detailed: 'Shows the full line, amount included.',
+};
 
 /**
  * Settings: who you are, how the app looks, and the way out.
@@ -159,16 +178,35 @@ export function SettingsScreen() {
         contentContainerStyle={{ paddingTop: theme.spacing.lg }}
         testID="settings-screen"
       >
-        <Card padding="xl" radius="xl">
+        <LinearGradient
+          colors={[theme.colors.heroSurface, theme.colors.heroSurfaceEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={[
+            theme.shadows.md,
+            {
+              borderRadius: theme.radius.xl,
+              borderWidth: theme.layout.hairline,
+              borderColor: theme.colors.heroBorder,
+              borderTopColor: 'rgba(255, 255, 255, 0.16)',
+              overflow: 'hidden',
+              padding: theme.spacing.xl,
+            },
+          ]}
+        >
+          <ProfileBloom color={theme.colors.brandText} />
+
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
             <View
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 26,
+                width: 56,
+                height: 56,
+                borderRadius: 28,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: theme.colors.brandSurface,
+                backgroundColor: theme.colors.heroTile,
+                borderWidth: 1.5,
+                borderColor: withAlpha(theme.colors.brandText, 0.4),
               }}
             >
               <Text variant="h3" color={theme.colors.brandText}>
@@ -176,10 +214,10 @@ export function SettingsScreen() {
               </Text>
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text variant="h3" numberOfLines={1}>
+              <Text variant="h3" color={theme.colors.heroText} numberOfLines={1}>
                 {profile?.name ?? 'Your profile'}
               </Text>
-              <Text variant="caption" tone="tertiary" numberOfLines={1}>
+              <Text variant="caption" color={theme.colors.heroTextMuted} numberOfLines={1}>
                 {profile?.email ?? ''}
               </Text>
             </View>
@@ -197,18 +235,22 @@ export function SettingsScreen() {
               marginTop: theme.spacing.lg,
               paddingTop: theme.spacing.md,
               borderTopWidth: theme.layout.hairline,
-              borderTopColor: theme.colors.divider,
+              borderTopColor: theme.colors.heroTileBorder,
             }}
           >
-            <Icon name="clock" size={14} color={theme.colors.textTertiary} />
-            <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ flex: 1 }}>
+            <Icon name="clock" size={14} color={theme.colors.heroTextMuted} />
+            <Text
+              variant="caption"
+              color={theme.colors.heroTextMuted}
+              numberOfLines={1}
+              style={{ flex: 1 }}
+            >
               {profile?.timezone ?? 'Asia/Kolkata'}
             </Text>
           </View>
-        </Card>
+        </LinearGradient>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Account" />
+        <Group title="Account">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ListRow
@@ -228,10 +270,9 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Money" />
+        <Group title="Money">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ListRow
@@ -272,10 +313,9 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Notify me about" />
+        <Group title="Notify me about">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ToggleRow
@@ -339,58 +379,31 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Notification privacy" />
-          <Card padding={0} radius="xl">
-            <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-              <Text variant="bodySm" tone="secondary">
-                Control how much financial information is shown in notification previews on the lock screen.
-              </Text>
-              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-                {(['private', 'basic', 'detailed'] as const).map((mode) => {
-                  const selected = (prefs?.previewMode ?? 'private') === mode;
-                  const label = mode === 'private' ? 'Private' : mode === 'basic' ? 'Basic' : 'Detailed';
-                  return (
-                    <Pressable
-                      key={mode}
-                      onPress={() => {
-                        tapFeedback();
-                        updatePrefs.mutate({ previewMode: mode });
-                      }}
-                      style={{
-                        flex: 1,
-                        paddingVertical: theme.spacing.sm,
-                        borderRadius: theme.radius.md,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: selected ? theme.colors.brand : theme.colors.surfaceMuted,
-                      }}
-                    >
-                      <Text
-                        variant="label"
-                        style={{
-                          color: selected ? theme.colors.textOnAccent : theme.colors.textSecondary,
-                        }}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+        <Group
+          title="Lock screen"
+          caption="How much of a figure shows in a notification preview"
+        >
+          <Card padding="lg" radius="xl">
+            <SegmentedControl
+              options={PREVIEW_MODES}
+              value={prefs?.previewMode ?? 'private'}
+              onChange={(previewMode) => updatePrefs.mutate({ previewMode })}
+              accessibilityLabel="Notification preview detail"
+            />
+            <Text variant="caption" tone="tertiary" style={{ marginTop: theme.spacing.md }}>
+              {PREVIEW_HINTS[prefs?.previewMode ?? 'private']}
+            </Text>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Quiet hours" />
+        <Group title="Quiet hours">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ToggleRow
-                title="Quiet Hours (10:00 PM – 8:00 AM)"
-                subtitle="Mutes push notifications during sleep hours"
+                title="Quiet hours"
+                subtitle="Nothing pushes between 10:00 PM and 8:00 AM"
                 icon="moon"
                 value={prefs?.quietHours?.enabled ?? true}
                 busy={updatePrefs.isPending && pendingToggle === 'quiet'}
@@ -401,74 +414,28 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Accent" />
-          <Card padding={0} radius="xl">
-            <View style={{ paddingHorizontal: theme.spacing.lg }}>
-              {accentList.map((option, index) => {
-                const selected = option.id === accent;
-                const preview = colorsByAccent[option.id];
-                return (
-                  <Fragment key={option.id}>
-                    {index > 0 ? <Divider inset={DIVIDER_INSET} /> : null}
-                    <ListRow
-                      title={option.label}
-                      subtitle={selected ? 'Active' : 'Tap to apply'}
-                      leading={
-                        // A two-tone swatch: the brand fill over the canvas it sits
-                        // on, which is what actually changes between accents.
-                        <View
-                          style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: theme.radius.sm,
-                            backgroundColor: preview.background,
-                            borderWidth: theme.layout.hairline,
-                            borderColor: preview.border,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <View
-                            style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 10,
-                              backgroundColor: preview.brand,
-                            }}
-                          />
-                        </View>
-                      }
-                      trailing={
-                        selected ? (
-                          <Icon
-                            name="check"
-                            size={19}
-                            color={theme.colors.brandText}
-                            accessibilityLabel="Selected"
-                          />
-                        ) : null
-                      }
-                      onPress={() => setAccent(option.id)}
-                      selected={selected}
-                      accessibilityHint={selected ? 'Currently selected' : 'Applies this accent'}
-                    />
-                  </Fragment>
-                );
-              })}
-            </View>
-          </Card>
-        </View>
+        <Group title="Accent" caption="Tints the whole app, greys included">
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+            {accentList.map((option) => (
+              <AccentSwatch
+                key={option.id}
+                label={option.label}
+                preview={colorsByAccent[option.id]}
+                selected={option.id === accent}
+                onPress={() => setAccent(option.id)}
+              />
+            ))}
+          </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="Your data" />
+        <Group title="Your data">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ListRow
                 title="Export transactions"
-                subtitle="A spreadsheet of everything, to keep or share"
+                subtitle="Every transaction, as a CSV"
                 leading={<IconTile name="package" color={theme.colors.brandText} />}
                 onPress={() => void exportEverything()}
                 accessibilityHint="Creates a CSV file and opens the share sheet"
@@ -495,10 +462,9 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
-        <View style={{ marginTop: theme.spacing.xxxl }}>
-          <SectionHeader title="App" />
+        <Group title="App">
           <Card padding={0} radius="xl">
             <View style={{ paddingHorizontal: theme.spacing.lg }}>
               <ListRow
@@ -526,7 +492,7 @@ export function SettingsScreen() {
               />
             </View>
           </Card>
-        </View>
+        </Group>
 
         {__DEV__ ? (
           <Card variant="muted" radius="md" padding="lg" style={{ marginTop: theme.spacing.xxl }}>
@@ -645,3 +611,175 @@ function ToggleRow({ title, subtitle, icon, value, busy, onChange }: ToggleRowPr
     </Pressable>
   );
 }
+
+/**
+ * A settings group: a small caps label, an optional line of explanation, and the
+ * card that holds the rows.
+ *
+ * The label is deliberately quieter than a section title elsewhere in the app. On
+ * a screen that is nothing but stacked cards, headings competing with the rows
+ * they introduce is what makes a settings list feel like a form.
+ */
+function Group({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+}) {
+  const theme = useTheme();
+
+  return (
+    <View style={{ marginTop: theme.spacing.xxxl }}>
+      <View
+        style={{
+          gap: 3,
+          marginBottom: theme.spacing.sm,
+          paddingHorizontal: theme.spacing.xs,
+        }}
+      >
+        <Text variant="overline" tone="tertiary" accessibilityRole="header">
+          {title}
+        </Text>
+        {caption ? (
+          <Text variant="caption" tone="tertiary">
+            {caption}
+          </Text>
+        ) : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * One accent, previewed as the thing it actually changes.
+ *
+ * An accent here is not just a brand colour — it tints the whole neutral ramp —
+ * so the swatch shows a miniature card on that accent's own canvas rather than a
+ * dot of the brand colour, which would look near-identical across all three.
+ */
+function AccentSwatch({
+  label,
+  preview,
+  selected,
+  onPress,
+}: {
+  label: string;
+  preview: ColorTokens;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (selected) return;
+        tapFeedback();
+        onPress();
+      }}
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ selected, checked: selected }}
+      accessibilityHint={selected ? 'Currently selected' : 'Applies this accent'}
+      style={({ pressed }) => ({ flex: 1, minWidth: 0, opacity: pressed ? 0.75 : 1 })}
+    >
+      <View
+        style={{
+          padding: theme.spacing.sm,
+          gap: theme.spacing.sm,
+          borderRadius: theme.radius.lg,
+          backgroundColor: theme.colors.surface,
+          borderWidth: selected ? 1.5 : theme.layout.hairline,
+          borderColor: selected ? preview.brandText : theme.colors.border,
+        }}
+      >
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            height: 54,
+            borderRadius: theme.radius.sm,
+            backgroundColor: preview.background,
+            borderWidth: theme.layout.hairline,
+            borderColor: preview.border,
+            padding: theme.spacing.sm,
+            justifyContent: 'space-between',
+          }}
+        >
+          <View
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              backgroundColor: preview.brand,
+            }}
+          />
+          <View style={{ gap: 3 }}>
+            <View
+              style={{
+                height: 3,
+                width: '80%',
+                borderRadius: 2,
+                backgroundColor: preview.brandText,
+                opacity: 0.55,
+              }}
+            />
+            <View
+              style={{
+                height: 3,
+                width: '45%',
+                borderRadius: 2,
+                backgroundColor: preview.textTertiary,
+                opacity: 0.6,
+              }}
+            />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text
+            variant="labelSm"
+            numberOfLines={1}
+            style={{ flex: 1, minWidth: 0 }}
+            color={selected ? theme.colors.textPrimary : theme.colors.textSecondary}
+          >
+            {label}
+          </Text>
+          {selected ? (
+            <Icon name="check" size={14} color={preview.brandText} strokeWidth={2.6} />
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Atmosphere on the profile slab. Non-interactive and outside the layout. */
+function ProfileBloom({ color }: { color: string }) {
+  return (
+    <Svg
+      width={260}
+      height={200}
+      style={styles.bloom}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Defs>
+        <RadialGradient id="profileBloom" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={0.22} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.05} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={190} cy={50} rx={120} ry={95} fill="url(#profileBloom)" />
+    </Svg>
+  );
+}
+
+const styles = StyleSheet.create({
+  bloom: { position: 'absolute', top: -36, right: -36, pointerEvents: 'none' },
+});

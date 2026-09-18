@@ -1,7 +1,8 @@
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import { ProgressRing } from '@/components/charts';
-import { Card, Icon, Text } from '@/components/ui';
+import { Card, Icon, Text, withAlpha } from '@/components/ui';
 import { useTheme } from '@/theme';
 import type { PeriodSummary } from '@/types/models';
 import { formatINR } from '@/utils/currency';
@@ -11,101 +12,164 @@ export type SavingsCardProps = {
   onPress?: () => void;
 };
 
+/** The rate a savings figure is usually measured against. */
+const HEALTHY_RATE = 20;
+
 /**
  * Savings framed as a rate, not just a number. "₹71,773" means little on its own;
  * "46% of what you earned" is the figure someone can act on, so the ring and the
- * tip line both quote the same percentage.
+ * line beneath it both quote the same percentage.
+ *
+ * The note at the bottom compares that rate to something — 20% is the benchmark
+ * most guidance lands on — because a percentage with nothing to measure it against
+ * is just another number to interpret.
  */
 export function SavingsCard({ summary, onPress }: SavingsCardProps) {
   const theme = useTheme();
 
-  // Savings rate, not a savings figure: ₹71,773 means little on its own, and
-  // "46% of what you earned" is the number someone can act on.
   const rate = summary.income > 0 ? summary.saved / summary.income : 0;
   const overspent = summary.saved < 0;
   const percent = Math.round(Math.abs(rate) * 100);
-  const accent = overspent ? theme.colors.negative : theme.colors.brand;
+  const accent = overspent ? theme.colors.negative : theme.colors.positive;
+
+  const verdict = overspent
+    ? {
+        icon: 'alertTriangle' as const,
+        title: `Spending ran ${percent}% past what came in`,
+        body: 'Trimming one category is usually enough to close a gap this size.',
+      }
+    : percent >= HEALTHY_RATE * 2
+      ? {
+          icon: 'shieldCheck' as const,
+          title: `Keeping ${percent}% of what you earned`,
+          body: `Well clear of the ${HEALTHY_RATE}% rate most guidance aims for.`,
+        }
+      : percent >= HEALTHY_RATE
+        ? {
+            icon: 'check' as const,
+            title: `Keeping ${percent}% of what you earned`,
+            body: `Above the ${HEALTHY_RATE}% rate worth holding each month.`,
+          }
+        : {
+            icon: 'bulb' as const,
+            title: `Keeping ${percent}% of what you earned`,
+            body: `A little under the ${HEALTHY_RATE}% rate worth aiming for.`,
+          };
 
   return (
-    <Card radius="xl" padding="xl">
+    <Card radius="xl" padding="xl" style={styles.clip}>
+      <SavingsBloom color={accent} />
+
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
-        <View style={{ flex: 1, minWidth: 0, gap: theme.spacing.sm }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-            <View
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 13,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: overspent
-                  ? theme.colors.negativeSurface
-                  : theme.colors.brandSurface,
-              }}
-            >
-              <Icon name="rupee" size={13} color={accent} strokeWidth={2.2} />
-            </View>
-            <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ flex: 1 }}>
-              {overspent ? 'You overspent this period' : 'You saved this period'}
-            </Text>
-          </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <Text variant="overline" tone="tertiary" numberOfLines={1}>
+            {overspent ? 'Overspent this period' : 'Saved this period'}
+          </Text>
 
           <Text variant="h1" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {formatINR(Math.abs(summary.saved))}
           </Text>
+
+          {summary.income > 0 ? (
+            <Text variant="caption" tone="tertiary" numberOfLines={1}>
+              {`of ${formatINR(summary.income)} earned`}
+            </Text>
+          ) : null}
         </View>
 
         <ProgressRing
           value={overspent ? 1 : rate}
-          size={96}
-          thickness={11}
+          size={104}
+          thickness={10}
           color={accent}
-          colorEnd={overspent ? accent : theme.colors.brandPressed}
-          trackColor={theme.colors.surfaceMuted}
+          // One hue, flat: savings is a money-direction figure, and a ring that
+          // graded off into the brand colour would stop reading as "kept".
+          trackColor={theme.colors.surfaceStrong}
           gradientId="savingsRing"
           accessibilityLabel={`Savings rate ${percent} percent`}
         >
-          <Text variant="h3" numberOfLines={1}>
+          <Text variant="h2" numberOfLines={1} maxFontSizeMultiplier={1.15}>
             {`${percent}%`}
           </Text>
-          <Text variant="caption" tone="tertiary">
-            {overspent ? 'Over' : 'Saved'}
+          <Text variant="overline" tone="tertiary" maxFontSizeMultiplier={1.2}>
+            {overspent ? 'over' : 'saved'}
           </Text>
         </ProgressRing>
       </View>
 
       <Pressable
         onPress={onPress}
+        disabled={!onPress}
         accessibilityRole="button"
-        accessibilityLabel={
-          overspent
-            ? `You spent ${formatINR(summary.spent)} against ${formatINR(summary.income)} earned`
-            : `${percent} percent of your income saved. Great job, you're on track.`
-        }
-        accessibilityHint="Opens your savings breakdown"
-        style={{
+        accessibilityLabel={`${verdict.title}. ${verdict.body}`}
+        accessibilityHint="Opens your transactions for this period"
+        style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
           gap: theme.spacing.md,
           marginTop: theme.spacing.lg,
           padding: theme.spacing.md,
           borderRadius: theme.radius.md,
-          backgroundColor: overspent ? theme.colors.negativeSurface : theme.colors.brandSurface,
-        }}
+          backgroundColor: pressed ? theme.colors.surfaceStrong : theme.colors.surfaceMuted,
+          borderWidth: theme.layout.hairline,
+          borderColor: withAlpha(accent, 0.2),
+        })}
       >
-        <Icon name="bulb" size={17} color={accent} strokeWidth={2} />
-        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-          <Text variant="labelSm" color={accent} numberOfLines={1}>
-            {overspent
-              ? `Spending is ${percent}% over your income`
-              : `${percent}% of your income saved!`}
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: theme.radius.xs,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: withAlpha(accent, 0.16),
+          }}
+        >
+          <Icon name={verdict.icon} size={17} color={accent} strokeWidth={2.1} />
+        </View>
+
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text variant="labelSm" numberOfLines={1}>
+            {verdict.title}
           </Text>
-          <Text variant="caption" tone="tertiary" numberOfLines={1}>
-            {overspent ? 'Trim a category to get back on track.' : "Great job! You're on track."}
+          <Text variant="caption" tone="tertiary" numberOfLines={2}>
+            {verdict.body}
           </Text>
         </View>
-        <Icon name="chevronRight" size={15} color={theme.colors.textTertiary} />
+
+        {onPress ? (
+          <Icon name="chevronRight" size={16} color={theme.colors.textTertiary} />
+        ) : null}
       </Pressable>
     </Card>
   );
 }
+
+/** Atmosphere behind the ring, so the card is not a flat rectangle. */
+function SavingsBloom({ color }: { color: string }) {
+  return (
+    <Svg
+      width={240}
+      height={200}
+      style={styles.bloom}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Defs>
+        <RadialGradient id="savingsBloom" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={0.14} />
+          <Stop offset="0.6" stopColor={color} stopOpacity={0.035} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={170} cy={70} rx={110} ry={90} fill="url(#savingsBloom)" />
+    </Svg>
+  );
+}
+
+const styles = StyleSheet.create({
+  clip: { overflow: 'hidden' },
+  bloom: { position: 'absolute', top: -30, right: -30, pointerEvents: 'none' },
+});

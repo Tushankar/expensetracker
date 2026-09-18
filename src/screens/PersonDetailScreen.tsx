@@ -160,8 +160,9 @@ export function PersonDetailScreen() {
       }
     >
       <PageHeader
-        title={person?.name ?? 'Person Details'}
-        subtitle={person?.phone || person?.email || 'Contact'}
+        title={person?.name ?? 'Person'}
+        subtitle={person?.phone || person?.email || undefined}
+        onBack={() => navigation.goBack()}
         action={
           <IconButton
             name="trash"
